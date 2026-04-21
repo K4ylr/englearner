@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth.js v5 required tables ----------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  // Learning profile
+  cefrLevel       String? // "A1" | "A2" | "B1" | "B2" | "C1" | "C2"
+  estVocabSize    Int? // estimated known-word count from placement
+  dailyNewGoal    Int       @default(10)
+  dailyReviewCap  Int       @default(50)
+  interests       String[]  @default([]) // ["daily","news","business","academic","travel","tech"]
+  onboardedAt     DateTime?
+
+  accounts         Account[]
+  sessions         Session[]
+  userWords        UserWord[]
+  reviewLogs       ReviewLog[]
+  placementAnswers PlacementAnswer[]
+  dailySessions   DailySession[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ---------- Vocabulary domain ----------
+
+model Word {
+  id        Int      @id @default(autoincrement())
+  lemma     String   @unique
+  pos       String? // part-of-speech primary
+  ipaUs     String?
+  ipaUk     String?
+  defEn     String? // English definition
+  defZh     String? // Chinese translation
+  cefr      String? // "A1".."C2" or null
+  freqRank  Int? // BNC/COCA frequency rank (lower = more common)
+  tags      String[] @default([]) // e.g. "cet4","toefl","gk"
+  topics    String[] @default([]) // "daily","news","business","academic","travel","tech"
+  audioUs   String? // can be derived, but cache URL
+  audioUk   String?
+
+  examples  Example[]
+  userWords UserWord[]
+  reviewLogs ReviewLog[]
+  placementAnswers PlacementAnswer[]
+
+  @@index([cefr])
+  @@index([freqRank])
+}
+
+model Example {
+  id     Int    @id @default(autoincrement())
+  wordId Int
+  en     String
+  zh     String?
+  source String? // "dictionaryapi.dev" | "ecdict" | "manual"
+
+  word Word @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@index([wordId])
+}
+
+model UserWord {
+  userId     String
+  wordId     Int
+  state      String   @default("new") // "new"|"learning"|"review"|"relearning"|"mastered"
+  stability  Float    @default(0)
+  difficulty Float    @default(0)
+  elapsed    Int      @default(0) // days
+  scheduled  Int      @default(0) // days
+  reps       Int      @default(0)
+  lapses     Int      @default(0)
+  due        DateTime @default(now())
+  lastReview DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word Word @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@id([userId, wordId])
+  @@index([userId, due])
+  @@index([userId, state])
+}
+
+model ReviewLog {
+  id         BigInt   @id @default(autoincrement())
+  userId     String
+  wordId     Int
+  rating     Int // 1=Again 2=Hard 3=Good 4=Easy
+  state      String
+  stability  Float
+  difficulty Float
+  elapsed    Int
+  scheduled  Int
+  reviewedAt DateTime @default(now())
+  durationMs Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word Word @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reviewedAt])
+}
+
+model PlacementAnswer {
+  id        BigInt   @id @default(autoincrement())
+  userId    String
+  wordId    Int
+  known     Boolean
+  freqBand  Int // 0..7
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word Word @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model DailySession {
+  userId      String
+  date        DateTime // date only (00:00:00 UTC)
+  newDone     Int      @default(0)
+  reviewDone  Int      @default(0)
+  correct     Int      @default(0)
+  total       Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+}
