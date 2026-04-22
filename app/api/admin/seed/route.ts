@@ -7,13 +7,12 @@ import { youdaoAudio } from "@/lib/youdao";
 // Idempotent chunked seed endpoint. Call it repeatedly until { done: true }.
 // Protected by ADMIN_SECRET header.
 //   curl -X POST -H "x-admin-secret: $SECRET" https://<domain>/api/admin/seed
-// Each call inserts words that don't yet exist in the DB, up to BATCH_SIZE.
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// How many words to insert per HTTP call. Each insert does a Word upsert +
-// optional Example inserts so we stay well under Vercel's 60s limit.
-const BATCH_SIZE = 2000;
+// How many words to insert per HTTP call. createMany is a single SQL round-trip
+// so 3000 is well under Vercel's 60s budget even on a cold Neon connection.
+const BATCH_SIZE = 3000;
 
 type SeedWord = {
   lemma: string;
@@ -55,8 +54,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Figure out what's already in the DB so we can skip it. Use Set for O(1)
-  // membership check against the seed list.
+  // Skip lemmas already in the DB.
   const existingRows = await prisma.word.findMany({ select: { lemma: true } });
   const existing = new Set(existingRows.map((r) => r.lemma));
 
@@ -69,49 +67,65 @@ export async function POST(req: Request) {
     });
   }
 
+  // Pull words without example sub-records first — these can ride in a single
+  // createMany round-trip (by far the common case). Only those rare ones with
+  // examples need the slower relational create path.
   const batch = remaining.slice(0, BATCH_SIZE);
+  const plain = batch.filter((w) => !w.examples || w.examples.length === 0);
+  const withExamples = batch.filter((w) => w.examples && w.examples.length > 0);
+
   let inserted = 0;
 
-  // Use a plain loop (not $transaction) so that a bad row doesn't kill the
-  // whole batch — each word is its own unit of work. Duplicate-lemma errors
-  // are rare since we pre-filtered, but be tolerant of them.
-  const CHUNK = 100;
-  for (let i = 0; i < batch.length; i += CHUNK) {
-    const slice = batch.slice(i, i + CHUNK);
-    await Promise.all(
-      slice.map(async (w) => {
-        try {
-          await prisma.word.create({
-            data: {
-              lemma: w.lemma,
-              pos: w.pos ?? null,
-              ipaUs: w.ipaUs ?? null,
-              ipaUk: w.ipaUk ?? null,
-              defEn: w.defEn ?? null,
-              defZh: w.defZh ?? null,
-              cefr: w.cefr ?? null,
-              freqRank: w.freqRank ?? null,
-              tags: w.tags ?? [],
-              topics: w.topics ?? [],
-              audioUs: youdaoAudio(w.lemma, "us"),
-              audioUk: youdaoAudio(w.lemma, "uk"),
-              examples: w.examples
-                ? {
-                    create: w.examples.map((e) => ({
-                      en: e.en,
-                      zh: e.zh ?? null,
-                      source: "seed",
-                    })),
-                  }
-                : undefined,
-            },
-          });
-          inserted++;
-        } catch {
-          // Ignore dupe / race inserts — next call will see them as existing.
-        }
-      })
-    );
+  if (plain.length > 0) {
+    const res = await prisma.word.createMany({
+      data: plain.map((w) => ({
+        lemma: w.lemma,
+        pos: w.pos ?? null,
+        ipaUs: w.ipaUs ?? null,
+        ipaUk: w.ipaUk ?? null,
+        defEn: w.defEn ?? null,
+        defZh: w.defZh ?? null,
+        cefr: w.cefr ?? null,
+        freqRank: w.freqRank ?? null,
+        tags: w.tags ?? [],
+        topics: w.topics ?? [],
+        audioUs: youdaoAudio(w.lemma, "us"),
+        audioUk: youdaoAudio(w.lemma, "uk"),
+      })),
+      skipDuplicates: true,
+    });
+    inserted += res.count;
+  }
+
+  for (const w of withExamples) {
+    try {
+      await prisma.word.create({
+        data: {
+          lemma: w.lemma,
+          pos: w.pos ?? null,
+          ipaUs: w.ipaUs ?? null,
+          ipaUk: w.ipaUk ?? null,
+          defEn: w.defEn ?? null,
+          defZh: w.defZh ?? null,
+          cefr: w.cefr ?? null,
+          freqRank: w.freqRank ?? null,
+          tags: w.tags ?? [],
+          topics: w.topics ?? [],
+          audioUs: youdaoAudio(w.lemma, "us"),
+          audioUk: youdaoAudio(w.lemma, "uk"),
+          examples: {
+            create: (w.examples ?? []).map((e) => ({
+              en: e.en,
+              zh: e.zh ?? null,
+              source: "seed",
+            })),
+          },
+        },
+      });
+      inserted++;
+    } catch {
+      // Race/dup — next call will see it as existing.
+    }
   }
 
   const totalAfter = existingRows.length + inserted;
