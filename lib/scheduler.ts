@@ -22,11 +22,16 @@ export type QueueItem = {
 };
 
 function cefrNeighbors(level: string | null): string[] {
+  // Return the user's own level and one level up. We deliberately DO NOT
+  // include the level below, because that floods advanced learners with
+  // words they already know (e.g. a C1 user getting "proposal" from B2).
+  // A1 learners get A1+A2, C1 learners get C1 only (we have no C2 in
+  // corpus), etc. Unknown level biases toward intermediate.
   const order = ["A1", "A2", "B1", "B2", "C1", "C2"];
   if (!level) return ["A2", "B1", "B2"];
   const i = order.indexOf(level);
   if (i < 0) return ["A2", "B1", "B2"];
-  return [order[i - 1], order[i], order[i + 1]].filter(Boolean) as string[];
+  return [order[i], order[i + 1]].filter(Boolean) as string[];
 }
 
 async function pickNewWithFallback(

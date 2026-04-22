@@ -204,13 +204,25 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
         </div>
       </header>
 
-      {/* Card */}
-      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] min-h-[520px] p-6 sm:p-10 flex flex-col">
-        <div className="flex-1 flex flex-col items-center justify-center gap-5">
-          <div className="text-6xl sm:text-7xl lg:text-8xl font-semibold tracking-tight text-center break-words leading-none">
+      {/* Card — goes two-column on wide screens: word+pronounce on the
+          left, definition/examples/video on the right (after flip). */}
+      <div
+        className={cn(
+          "rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] min-h-[560px] p-6 sm:p-10",
+          flipped ? "lg:grid lg:grid-cols-[1.1fr_1fr] lg:gap-10" : "flex flex-col"
+        )}
+      >
+        {/* Left / top panel: the lemma itself */}
+        <div
+          className={cn(
+            "flex flex-col items-center justify-center gap-6 text-center",
+            flipped ? "lg:border-r lg:border-[var(--color-border)] lg:pr-10" : "flex-1"
+          )}
+        >
+          <div className="text-7xl sm:text-8xl lg:text-9xl font-semibold tracking-tight break-words leading-[1.05]">
             {current.lemma}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 text-base">
             {current.pos && (
               <span className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)]">
                 {current.pos}
@@ -223,13 +235,13 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <PronounceButton word={current.lemma} variant="us" size="sm" />
-            <PronounceButton word={current.lemma} variant="uk" size="sm" />
+            <PronounceButton word={current.lemma} variant="us" />
+            <PronounceButton word={current.lemma} variant="uk" />
           </div>
         </div>
 
         {flipped && (
-          <div className="border-t border-[var(--color-border)] pt-6 mt-6 space-y-5">
+          <div className="mt-8 lg:mt-0 pt-6 lg:pt-0 border-t lg:border-t-0 border-[var(--color-border)] space-y-5 overflow-y-auto">
             {current.defZh && (
               <div>
                 <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">

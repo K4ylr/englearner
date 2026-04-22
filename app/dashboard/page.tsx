@@ -60,8 +60,8 @@ export default async function DashboardPage() {
   const canStudy = !needsSeeding && (dueCount > 0 || mode === "endless" || remainingNew > 0);
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-10">
-      <div className="max-w-3xl mx-auto space-y-8">
+    <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-10">
+      <div className="max-w-5xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
           <div>
             <div className="text-sm text-[var(--color-fg-muted)]">已登录</div>
