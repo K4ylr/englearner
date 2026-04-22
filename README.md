@@ -13,11 +13,13 @@
 - `ts-fsrs` 间隔重复封装（`lib/fsrs.ts`）
 - 首页 / 登录 / 邮件确认 / 仪表盘 页面
 
-**Phase B — 词库 + 学习主循环**（未开工）
+**Phase B — 词库 + 学习主循环 ✅**
 
-- ECDICT 词库导入脚本
-- 闪卡学习界面（有道发音 + YouGlish 视频）
-- 每日学习队列 API（穿插新词与复习）
+- 预筛词库 JSON (`data/seed-words.json`)，管理员 API 一次性导入
+- FSRS 调度 + `/api/study/next`（新词 1:3 穿插复习）
+- `/api/study/review` 提交评分 → `ts-fsrs` 更新下次 due
+- 闪卡 UI：有道英美发音、YouGlish 真实语境视频、键盘 1/2/3/4 评分
+- Dashboard 显示今日任务数并链接到 `/study`
 
 **Phase C — 个性化**（未开工）
 
@@ -49,6 +51,7 @@ pnpm dev
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `AUTH_RESEND_KEY` | Resend 控制台 (https://resend.com/api-keys) 免费 3000/月 |
 | `EMAIL_FROM` | 邮件发件人。先用 `onboarding@resend.dev` 测试，生产换自己验证过的域名 |
+| `ADMIN_SECRET` | 保护 `/api/admin/seed`。`openssl rand -base64 24` 生成 |
 
 ## 部署到 Vercel
 
@@ -67,13 +70,36 @@ pnpm dev
    或者把 build 命令改成 `pnpm prisma migrate deploy && pnpm build`。
 7. 访问部署后的域名 → `/login` → 输入邮箱 → 查收登录链接 → 进入 `/dashboard` ✅
 
-### 验证清单（Phase A）
+### 首次导入词库（Phase B 上线后一次性）
 
-- [ ] `pnpm dev` 本地启动无错
-- [ ] 登录页能提交邮箱并收到魔法链接邮件
-- [ ] 点击邮件链接跳转到 `/dashboard` 并显示登录邮箱
-- [ ] Vercel 生产环境同样流程可走通
-- [ ] `curl https://<domain>/api/auth/session` 能返回已登录 session
+Redeploy 完成后调一次 admin seed 接口：
+
+```bash
+curl -X POST -H "x-admin-secret: $ADMIN_SECRET" \
+  https://<your-domain>/api/admin/seed
+```
+
+返回 `{ "inserted": N, "total": N }` 即完成。Dashboard 上"词库总量"
+会显示数字，"开始学习"按钮变为可用。
+
+如需重新导入（会清空所有用户学习记录）：
+
+```bash
+curl -X DELETE -H "x-admin-secret: $ADMIN_SECRET" \
+  https://<your-domain>/api/admin/seed
+curl -X POST  -H "x-admin-secret: $ADMIN_SECRET" \
+  https://<your-domain>/api/admin/seed
+```
+
+### 验证清单
+
+- [ ] 登录 → 跳到 `/dashboard`
+- [ ] Dashboard 显示"词库总量"有数值
+- [ ] 点"开始学习"进入 `/study`，显示闪卡
+- [ ] 按 **Space** 翻面，按 **1/2/3/4** 评分
+- [ ] 点击 **US/UK** 按钮能听到有道发音
+- [ ] 点击"听真人怎么说"嵌入 YouGlish 视频
+- [ ] 回仪表盘后，"今日已学"计数增加
 
 ## 技术选型说明
 

@@ -1,15 +1,13 @@
-import { PrismaClient } from "@prisma/client";
+import { NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { prisma } from "@/lib/db";
+import { youdaoAudio } from "@/lib/youdao";
 
-const prisma = new PrismaClient();
-
-function youdaoAudio(word: string, variant: "us" | "uk" = "us"): string {
-  const type = variant === "uk" ? 1 : 0;
-  return `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(
-    word
-  )}&type=${type}`;
-}
+// One-time seed endpoint — protected by ADMIN_SECRET header.
+// curl -X POST -H "x-admin-secret: $SECRET" https://<domain>/api/admin/seed
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type SeedWord = {
   lemma: string;
@@ -25,11 +23,16 @@ type SeedWord = {
   examples?: { en: string; zh?: string | null }[];
 };
 
-async function main() {
-  const existing = await prisma.word.count();
-  if (existing > 0) {
-    console.log(`[seed] ${existing} words already present, skipping.`);
-    return;
+export async function POST(req: Request) {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) {
+    return NextResponse.json(
+      { error: "ADMIN_SECRET not configured" },
+      { status: 500 }
+    );
+  }
+  if (req.headers.get("x-admin-secret") !== secret) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   const jsonPath = path.join(process.cwd(), "data", "seed-words.json");
@@ -37,14 +40,21 @@ async function main() {
   try {
     raw = await fs.readFile(jsonPath, "utf-8");
   } catch {
-    console.log(
-      "[seed] data/seed-words.json not found — nothing to import. This is fine for a fresh scaffold."
+    return NextResponse.json(
+      { error: "data/seed-words.json not found in build output" },
+      { status: 500 }
     );
-    return;
   }
   const words: SeedWord[] = JSON.parse(raw);
 
-  console.log(`[seed] Importing ${words.length} words…`);
+  const existing = await prisma.word.count();
+  if (existing > 0) {
+    return NextResponse.json({
+      skipped: true,
+      message: `Already has ${existing} words. Call DELETE first to reseed.`,
+    });
+  }
+
   let inserted = 0;
   const CHUNK = 200;
   for (let i = 0; i < words.length; i += CHUNK) {
@@ -79,14 +89,17 @@ async function main() {
       )
     );
     inserted += slice.length;
-    if (inserted % 1000 === 0) console.log(`[seed]  ${inserted}/${words.length}`);
   }
-  console.log(`[seed] done — ${inserted} words inserted.`);
+
+  return NextResponse.json({ inserted, total: words.length });
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+export async function DELETE(req: Request) {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret || req.headers.get("x-admin-secret") !== secret) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  // Remove seeded words (cascades to Example, UserWord, ReviewLog, PlacementAnswer).
+  const deleted = await prisma.word.deleteMany({});
+  return NextResponse.json({ deleted: deleted.count });
+}

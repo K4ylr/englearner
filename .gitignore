@@ -44,6 +44,6 @@ yarn-error.log*
 prisma/*.db
 prisma/*.db-journal
 
-# data artifacts
-/data/ecdict-common.json
+# data artifacts — raw source downloads only; curated seed-words.json IS committed
 /data/ecdict.csv
+/data/ecdict.sqlite
