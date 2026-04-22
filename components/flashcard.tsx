@@ -23,11 +23,14 @@ type QueueItem = {
 
 type Rating = 1 | 2 | 3 | 4;
 
-const RATING_LABELS: Record<Rating, { label: string; sub: string; tone: string }> = {
-  1: { label: "不会", sub: "Again", tone: "bg-rose-500" },
-  2: { label: "模糊", sub: "Hard", tone: "bg-amber-500" },
-  3: { label: "会", sub: "Good", tone: "bg-emerald-500" },
-  4: { label: "熟练", sub: "Easy", tone: "bg-sky-500" },
+const RATING_META: Record<
+  Rating,
+  { label: string; sub: string; tone: string; key: string }
+> = {
+  1: { label: "不会", sub: "Again", tone: "bg-rose-500", key: "1" },
+  2: { label: "模糊", sub: "Hard", tone: "bg-amber-500", key: "2" },
+  3: { label: "会", sub: "Good", tone: "bg-emerald-500", key: "3" },
+  4: { label: "熟练", sub: "Easy", tone: "bg-sky-500", key: "4" },
 };
 
 export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
@@ -71,17 +74,43 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
     [current, submitting]
   );
 
-  // Keyboard: space to flip, 1-4 to rate.
+  // Keyboard flow:
+  //   Space / Enter   — flip; after flip, Space = Good (3) to fast-forward
+  //   J / ←           — Again (1) "don't know"
+  //   K / →           — Good (3)  "know"
+  //   1 / 2 / 3 / 4   — precise rating
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (done) return;
-      if (e.key === " " || e.key === "Enter") {
-        e.preventDefault();
-        if (!flipped) setFlipped(true);
+
+      if (!flipped) {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          setFlipped(true);
+        } else if (e.key === "j" || e.key === "J" || e.key === "ArrowLeft") {
+          // Power-user: say "I don't know it" without flipping first.
+          e.preventDefault();
+          setFlipped(true);
+          submit(1);
+        } else if (e.key === "k" || e.key === "K" || e.key === "ArrowRight") {
+          e.preventDefault();
+          setFlipped(true);
+          submit(3);
+        }
         return;
       }
-      if (!flipped) return;
-      if (e.key === "1") submit(1);
+
+      // flipped
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        submit(3);
+      } else if (e.key === "j" || e.key === "J" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        submit(1);
+      } else if (e.key === "k" || e.key === "K" || e.key === "ArrowRight") {
+        e.preventDefault();
+        submit(3);
+      } else if (e.key === "1") submit(1);
       else if (e.key === "2") submit(2);
       else if (e.key === "3") submit(3);
       else if (e.key === "4") submit(4);
@@ -94,16 +123,24 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
     return (
       <div className="text-center space-y-4 py-16">
         <div className="text-4xl">🎉</div>
-        <h2 className="text-2xl font-semibold">今天没有任务</h2>
+        <h2 className="text-2xl font-semibold">暂时没有任务</h2>
         <p className="text-[var(--color-fg-muted)]">
-          明天再来吧——或者去设置里提高每日目标。
+          到设置里切换到<strong className="font-medium">无尽模式</strong>可以一直学。
         </p>
-        <Link
-          href="/dashboard"
-          className="inline-block text-[var(--color-brand)] hover:underline"
-        >
-          返回仪表盘
-        </Link>
+        <div className="flex justify-center gap-3 pt-2">
+          <Link
+            href="/dashboard"
+            className="h-10 inline-flex items-center px-4 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-surface)] transition"
+          >
+            返回仪表盘
+          </Link>
+          <Link
+            href="/settings"
+            className="h-10 inline-flex items-center px-4 rounded-lg bg-[var(--color-brand)] text-white text-sm hover:bg-[var(--color-brand-hover)] transition"
+          >
+            去设置
+          </Link>
+        </div>
       </div>
     );
   }
@@ -114,9 +151,9 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
     return (
       <div className="text-center space-y-4 py-16">
         <div className="text-4xl">✅</div>
-        <h2 className="text-2xl font-semibold">今天的任务完成啦！</h2>
+        <h2 className="text-2xl font-semibold">这一组背完啦！</h2>
         <p className="text-[var(--color-fg-muted)]">
-          一共 {stats.total} 张卡片，正确率 {accuracy}%
+          一共 {stats.total} 张，正确率 {accuracy}%
         </p>
         <div className="flex items-center justify-center gap-3 pt-2">
           <Link
@@ -129,7 +166,7 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
             onClick={() => router.refresh()}
             className="h-10 inline-flex items-center px-4 rounded-lg bg-[var(--color-brand)] text-white text-sm hover:bg-[var(--color-brand-hover)] transition"
           >
-            继续下一组
+            再来一组 →
           </button>
         </div>
       </div>
@@ -138,10 +175,13 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
 
   return (
     <div className="space-y-6">
+      {/* Meta row */}
       <header className="flex items-center justify-between text-sm text-[var(--color-fg-muted)]">
-        <div>
-          {idx + 1} / {queue.length}
-          <span className="mx-2">·</span>
+        <div className="flex items-center gap-2">
+          <span className="tabular-nums">
+            {idx + 1} / {queue.length}
+          </span>
+          <span className="text-[var(--color-border)]">·</span>
           <span
             className={cn(
               "inline-block rounded-full px-2 py-0.5 text-xs",
@@ -153,9 +193,7 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
             {current.kind === "new" ? "新词" : "复习"}
           </span>
           {current.cefr && (
-            <span className="ml-2 text-xs text-[var(--color-fg-muted)]">
-              {current.cefr}
-            </span>
+            <span className="text-xs">{current.cefr}</span>
           )}
         </div>
         <div>
@@ -166,31 +204,38 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
         </div>
       </header>
 
-      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] min-h-[380px] p-8 flex flex-col">
-        <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-          <div className="text-4xl sm:text-5xl font-semibold tracking-tight">
+      {/* Card */}
+      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] min-h-[520px] p-6 sm:p-10 flex flex-col">
+        <div className="flex-1 flex flex-col items-center justify-center gap-5">
+          <div className="text-6xl sm:text-7xl lg:text-8xl font-semibold tracking-tight text-center break-words leading-none">
             {current.lemma}
           </div>
-          {current.pos && (
-            <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)]">
-              {current.pos}
-            </div>
-          )}
-          <div className="flex items-center gap-3 text-sm text-[var(--color-fg-muted)]">
-            {current.ipaUs && <span>/{current.ipaUs}/</span>}
+          <div className="flex items-center gap-3">
+            {current.pos && (
+              <span className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)]">
+                {current.pos}
+              </span>
+            )}
+            {current.ipaUs && (
+              <span className="text-[var(--color-fg-muted)]">
+                /{current.ipaUs}/
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             <PronounceButton word={current.lemma} variant="us" size="sm" />
             <PronounceButton word={current.lemma} variant="uk" size="sm" />
           </div>
         </div>
 
-        {flipped ? (
-          <div className="border-t border-[var(--color-border)] pt-6 mt-6 space-y-4">
+        {flipped && (
+          <div className="border-t border-[var(--color-border)] pt-6 mt-6 space-y-5">
             {current.defZh && (
               <div>
                 <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">
                   中文释义
                 </div>
-                <div className="text-lg leading-relaxed">{current.defZh}</div>
+                <div className="text-xl leading-relaxed">{current.defZh}</div>
               </div>
             )}
             {current.defEn && (
@@ -227,37 +272,118 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
             )}
             <YouGlishEmbed word={current.lemma} />
           </div>
-        ) : (
-          <button
-            onClick={() => setFlipped(true)}
-            className="mt-6 h-10 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-border)] transition"
-          >
-            显示释义（Space）
-          </button>
         )}
       </div>
 
-      {flipped && (
-        <div className="grid grid-cols-4 gap-2">
-          {([1, 2, 3, 4] as Rating[]).map((r) => (
-            <button
-              key={r}
+      {/* Actions */}
+      {!flipped ? (
+        <div className="space-y-3">
+          <button
+            onClick={() => setFlipped(true)}
+            className="w-full h-12 rounded-xl border border-[var(--color-border)] text-sm hover:bg-[var(--color-surface)] transition"
+          >
+            显示释义
+          </button>
+          <KeyboardHints
+            lines={[
+              { keys: ["Space"], desc: "显示释义" },
+              { keys: ["J", "←"], desc: "不会" },
+              { keys: ["K", "→"], desc: "会" },
+            ]}
+          />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Quick 2-button row */}
+          <div className="grid grid-cols-2 gap-2">
+            <RateButton
+              onClick={() => submit(1)}
               disabled={submitting}
-              onClick={() => submit(r)}
-              className={cn(
-                "h-14 rounded-xl text-white font-medium transition flex flex-col items-center justify-center gap-0.5 disabled:opacity-50",
-                RATING_LABELS[r].tone,
-                "hover:brightness-110"
-              )}
-            >
-              <div className="text-sm">{RATING_LABELS[r].label}</div>
-              <div className="text-[0.65rem] opacity-80 tracking-wider">
-                {r} · {RATING_LABELS[r].sub}
-              </div>
-            </button>
-          ))}
+              tone="bg-rose-500"
+              label="不会"
+              hint="J / ←"
+            />
+            <RateButton
+              onClick={() => submit(3)}
+              disabled={submitting}
+              tone="bg-emerald-500"
+              label="会"
+              hint="K / → / Space"
+            />
+          </div>
+          {/* Precise 4-button row */}
+          <div className="grid grid-cols-4 gap-2">
+            {([1, 2, 3, 4] as Rating[]).map((r) => (
+              <button
+                key={r}
+                disabled={submitting}
+                onClick={() => submit(r)}
+                className={cn(
+                  "h-11 rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-1.5 disabled:opacity-50 hover:brightness-110",
+                  RATING_META[r].tone
+                )}
+              >
+                <kbd className="bg-black/25 rounded px-1 py-0.5 text-[0.65rem] tabular-nums">
+                  {r}
+                </kbd>
+                <span>{RATING_META[r].label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RateButton({
+  onClick,
+  disabled,
+  tone,
+  label,
+  hint,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  tone: string;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "h-16 rounded-xl text-white font-medium transition flex flex-col items-center justify-center gap-0.5 disabled:opacity-50 hover:brightness-110",
+        tone
+      )}
+    >
+      <div className="text-base">{label}</div>
+      <div className="text-[0.65rem] opacity-80 tracking-wider">{hint}</div>
+    </button>
+  );
+}
+
+function KeyboardHints({
+  lines,
+}: {
+  lines: { keys: string[]; desc: string }[];
+}) {
+  return (
+    <div className="flex items-center justify-center gap-4 text-xs text-[var(--color-fg-muted)] flex-wrap">
+      {lines.map((l, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          {l.keys.map((k, j) => (
+            <kbd
+              key={j}
+              className="inline-block rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5 text-[0.7rem] font-mono"
+            >
+              {k}
+            </kbd>
+          ))}
+          <span>{l.desc}</span>
+        </div>
+      ))}
     </div>
   );
 }

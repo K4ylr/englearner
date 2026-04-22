@@ -21,11 +21,15 @@
 - 闪卡 UI：有道英美发音、YouGlish 真实语境视频、键盘 1/2/3/4 评分
 - Dashboard 显示今日任务数并链接到 `/study`
 
-**Phase C — 个性化**（未开工）
+**Phase C — 个性化 + 词库扩容 ✅**
 
-- 自适应水平测评（binary-search freqBand）
-- 兴趣方向选择、每日 pace 设置
-- 按 CEFR × topic 推荐新词
+- 词库扩到 **14,973 词**（A1-C1 + CET-4/6 + TOEFL/IELTS/GRE 标签）
+- 水平测评 `/onboarding/placement`：5 级 × 10 词，按认识率推估 CEFR + 词汇量
+- 兴趣选择 `/onboarding/interests`：日常/新闻/商务/学术/旅行/科技 六选多
+- 未 onboard 的用户登录后自动跳到测评
+- `/settings` 改 pace、模式、兴趣
+- **无尽模式**（默认）：`User.mode` 新字段，scheduler 忽略每日新词上限
+- 闪卡大字 (`text-7xl` lemma) + 新键盘：`J`/`←` 不会、`K`/`→`/`Space` 会、`1-4` 精确评分
 
 **Phase D — 打磨**（未开工）
 
@@ -70,17 +74,32 @@ pnpm dev
    或者把 build 命令改成 `pnpm prisma migrate deploy && pnpm build`。
 7. 访问部署后的域名 → `/login` → 输入邮箱 → 查收登录链接 → 进入 `/dashboard` ✅
 
-### 首次导入词库（Phase B 上线后一次性）
+### 导入词库（首次 or 从 3k 升到 15k）
 
-Redeploy 完成后调一次 admin seed 接口：
+Seed 接口是**幂等分批**的——每次调用插入最多 2000 个"DB 还没有的"词，
+调到返回 `done:true` 为止。15k 需要调 8 次左右。
 
-```bash
-curl -X POST -H "x-admin-secret: $ADMIN_SECRET" \
-  https://<your-domain>/api/admin/seed
+**PowerShell：**
+```powershell
+$url = "https://<domain>/api/admin/seed"
+$h = @{"x-admin-secret" = $env:ADMIN_SECRET}
+while ($true) {
+  $r = Invoke-RestMethod -Method Post -Uri $url -Headers $h -TimeoutSec 120
+  $r
+  if ($r.done) { break }
+}
 ```
 
-返回 `{ "inserted": N, "total": N }` 即完成。Dashboard 上"词库总量"
-会显示数字，"开始学习"按钮变为可用。
+**Bash：**
+```bash
+while true; do
+  R=$(curl -s -X POST -H "x-admin-secret: $ADMIN_SECRET" https://<domain>/api/admin/seed)
+  echo "$R"
+  [[ "$R" == *'"done":true'* ]] && break
+done
+```
+
+升级 3k → 15k 时不用 DELETE，直接 POST 几次就会补齐差额。
 
 如需重新导入（会清空所有用户学习记录）：
 

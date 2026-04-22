@@ -1,0 +1,33 @@
+{
+  "total": 14973,
+  "cefr": {
+    "A1": 913,
+    "A2": 872,
+    "B1": 1988,
+    "B2": 4500,
+    "C1": 6700
+  },
+  "tags": {
+    "cet4": 6394,
+    "ngsl": 2501,
+    "oxford3000": 2298,
+    "ielts": 4582,
+    "toefl": 6286,
+    "gre": 5906,
+    "cet6": 5299,
+    "oxford5000": 657
+  },
+  "topics": {
+    "daily": 3773,
+    "news": 1543,
+    "tech": 36,
+    "travel": 158,
+    "business": 110,
+    "academic": 64
+  },
+  "defZhPopulated": 14969,
+  "defEnPopulated": 14800,
+  "ipaPopulated": 14524,
+  "posPopulated": 11834,
+  "fileSizeBytes": 4469971
+}

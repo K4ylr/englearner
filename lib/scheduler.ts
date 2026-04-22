@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/db";
 
 // Interleave pattern: every 3 review cards, insert 1 new card.
-// This keeps the session flowing without dumping all new words at the end
-// (which is what fatigues users).
+// Keeps sessions flowing without dumping all new words at the end.
 const REVIEWS_PER_NEW = 3;
 
+// In endless mode we hand out this many new words at once so the user can
+// keep going; they fetch a fresh batch when they finish.
+const ENDLESS_BATCH = 30;
+
 export type QueueItem = {
-  userWordId?: never; // composite key; use {userId, wordId} instead
   wordId: number;
   kind: "new" | "review";
   lemma: string;
@@ -21,11 +23,44 @@ export type QueueItem = {
 
 function cefrNeighbors(level: string | null): string[] {
   const order = ["A1", "A2", "B1", "B2", "C1", "C2"];
-  if (!level) return ["A2", "B1", "B2"]; // reasonable default for unknown level
+  if (!level) return ["A2", "B1", "B2"];
   const i = order.indexOf(level);
   if (i < 0) return ["A2", "B1", "B2"];
-  // include the level itself plus one step up, and one step down as bridge
   return [order[i - 1], order[i], order[i + 1]].filter(Boolean) as string[];
+}
+
+async function pickNewWithFallback(
+  seen: number[],
+  cefrBucket: string[],
+  topics: string[],
+  budget: number
+) {
+  // Pass 1: topic ∩ CEFR match.
+  const primary = await prisma.word.findMany({
+    where: {
+      id: { notIn: seen },
+      cefr: { in: cefrBucket },
+      topics: { hasSome: topics },
+    },
+    orderBy: { freqRank: "asc" },
+    take: budget,
+    include: { examples: { take: 2 } },
+  });
+  if (primary.length >= budget) return primary;
+
+  // Pass 2: CEFR-only fallback for very narrow interests.
+  const picked = new Set(primary.map((w) => w.id));
+  const fallback = await prisma.word.findMany({
+    where: {
+      id: { notIn: [...seen, ...primary.map((w) => w.id)] },
+      cefr: { in: cefrBucket },
+    },
+    orderBy: { freqRank: "asc" },
+    take: budget - primary.length,
+    include: { examples: { take: 2 } },
+  });
+  // Dedup just in case.
+  return [...primary, ...fallback.filter((w) => !picked.has(w.id))];
 }
 
 export async function getTodayQueue(userId: string): Promise<QueueItem[]> {
@@ -35,6 +70,7 @@ export async function getTodayQueue(userId: string): Promise<QueueItem[]> {
       cefrLevel: true,
       dailyNewGoal: true,
       dailyReviewCap: true,
+      mode: true,
       interests: true,
     },
   });
@@ -42,7 +78,7 @@ export async function getTodayQueue(userId: string): Promise<QueueItem[]> {
 
   const now = new Date();
 
-  // --- 1. Fetch due reviews (oldest due first) up to cap ---
+  // 1. Due reviews — always capped.
   const dueReviews = await prisma.userWord.findMany({
     where: {
       userId,
@@ -51,61 +87,48 @@ export async function getTodayQueue(userId: string): Promise<QueueItem[]> {
     },
     orderBy: { due: "asc" },
     take: user.dailyReviewCap,
-    include: {
-      word: { include: { examples: { take: 2 } } },
-    },
+    include: { word: { include: { examples: { take: 2 } } } },
   });
 
-  // --- 2. Count how many new words already done today (respect daily cap) ---
-  const todayMidnight = new Date(now);
-  todayMidnight.setUTCHours(0, 0, 0, 0);
+  // 2. New-word budget depends on mode.
+  let newBudget: number;
+  if (user.mode === "endless") {
+    newBudget = Math.max(user.dailyNewGoal, ENDLESS_BATCH);
+  } else {
+    const todayMidnight = new Date(now);
+    todayMidnight.setUTCHours(0, 0, 0, 0);
+    const alreadyNewToday = await prisma.reviewLog.count({
+      where: {
+        userId,
+        reviewedAt: { gte: todayMidnight },
+        state: "new",
+      },
+    });
+    newBudget = Math.max(0, user.dailyNewGoal - alreadyNewToday);
+  }
 
-  const alreadyNewToday = await prisma.reviewLog.count({
-    where: {
-      userId,
-      reviewedAt: { gte: todayMidnight },
-      state: "new", // logged state snapshots at time of review → "new" means it was a new word
-    },
-  });
-  const newBudget = Math.max(0, user.dailyNewGoal - alreadyNewToday);
-
-  // --- 3. Pick new words matching CEFR (±1) and interests, excluding what user already has ---
-  const seenWordIds = await prisma.userWord.findMany({
+  // 3. Candidate pool: not-yet-seen, CEFR within ±1, and prefer topic matches.
+  const seenRows = await prisma.userWord.findMany({
     where: { userId },
     select: { wordId: true },
   });
-  const seen = new Set(seenWordIds.map((x) => x.wordId));
+  const seen = seenRows.map((x) => x.wordId);
 
   const cefrBucket = cefrNeighbors(user.cefrLevel);
   const topics = user.interests.length > 0 ? user.interests : null;
 
-  const newWordCandidates = await prisma.word.findMany({
-    where: {
-      id: { notIn: Array.from(seen) },
-      cefr: { in: cefrBucket },
-      ...(topics ? { topics: { hasSome: topics } } : {}),
-    },
-    orderBy: { freqRank: "asc" }, // prefer more common first
-    take: newBudget * 3, // overfetch, then slice
-    include: { examples: { take: 2 } },
-  });
+  const newWords =
+    newBudget === 0
+      ? []
+      : topics
+      ? await pickNewWithFallback(seen, cefrBucket, topics, newBudget)
+      : await prisma.word.findMany({
+          where: { id: { notIn: seen }, cefr: { in: cefrBucket } },
+          orderBy: { freqRank: "asc" },
+          take: newBudget,
+          include: { examples: { take: 2 } },
+        });
 
-  // If not enough matches (e.g. user still untargeted topics), widen to CEFR only.
-  let newWords = newWordCandidates.slice(0, newBudget);
-  if (newWords.length < newBudget && topics) {
-    const fallback = await prisma.word.findMany({
-      where: {
-        id: { notIn: [...Array.from(seen), ...newWords.map((w) => w.id)] },
-        cefr: { in: cefrBucket },
-      },
-      orderBy: { freqRank: "asc" },
-      take: newBudget - newWords.length,
-      include: { examples: { take: 2 } },
-    });
-    newWords = [...newWords, ...fallback];
-  }
-
-  // --- 4. Interleave ---
   const reviewItems: QueueItem[] = dueReviews.map((uw) => ({
     wordId: uw.wordId,
     kind: "review",

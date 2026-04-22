@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Settings } from "lucide-react";
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -11,34 +12,44 @@ export default async function DashboardPage() {
   if (!session?.user?.id) redirect("/login");
 
   const userId = session.user.id;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      dailyNewGoal: true,
+      cefrLevel: true,
+      estVocabSize: true,
+      onboardedAt: true,
+      mode: true,
+    },
+  });
+
+  const totalWords = await prisma.word.count();
+
+  // If the corpus is empty, onboarding can't work — show a seeding banner.
+  // Otherwise if the user hasn't completed onboarding, push them through it.
+  if (user && !user.onboardedAt && totalWords > 0) {
+    redirect("/onboarding/placement");
+  }
+
   const now = new Date();
   const todayMidnight = new Date(now);
   todayMidnight.setUTCHours(0, 0, 0, 0);
 
-  const [dueCount, newBudget, user, todaySession, totalWords] = await Promise.all(
-    [
-      prisma.userWord.count({
-        where: { userId, due: { lte: now }, state: { not: "mastered" } },
-      }),
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { dailyNewGoal: true, cefrLevel: true, onboardedAt: true },
-      }),
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { cefrLevel: true, onboardedAt: true },
-      }),
-      prisma.dailySession.findUnique({
-        where: { userId_date: { userId, date: todayMidnight } },
-      }),
-      prisma.word.count(),
-    ]
-  );
+  const [dueCount, todaySession] = await Promise.all([
+    prisma.userWord.count({
+      where: { userId, due: { lte: now }, state: { not: "mastered" } },
+    }),
+    prisma.dailySession.findUnique({
+      where: { userId_date: { userId, date: todayMidnight } },
+    }),
+  ]);
 
-  const dailyNewGoal = newBudget?.dailyNewGoal ?? 10;
+  const dailyNewGoal = user?.dailyNewGoal ?? 10;
   const newDoneToday = todaySession?.newDone ?? 0;
   const reviewDoneToday = todaySession?.reviewDone ?? 0;
-  const remainingNew = Math.max(0, dailyNewGoal - newDoneToday);
+  const mode = user?.mode ?? "endless";
+  const remainingNew =
+    mode === "endless" ? Infinity : Math.max(0, dailyNewGoal - newDoneToday);
 
   async function logout() {
     "use server";
@@ -46,6 +57,7 @@ export default async function DashboardPage() {
   }
 
   const needsSeeding = totalWords === 0;
+  const canStudy = !needsSeeding && (dueCount > 0 || mode === "endless" || remainingNew > 0);
 
   return (
     <main className="min-h-screen px-4 sm:px-6 py-10">
@@ -55,14 +67,23 @@ export default async function DashboardPage() {
             <div className="text-sm text-[var(--color-fg-muted)]">已登录</div>
             <div className="font-medium">{session.user.email}</div>
           </div>
-          <form action={logout}>
-            <button
-              type="submit"
-              className="h-9 px-3 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-surface)] transition"
+          <div className="flex items-center gap-2">
+            <Link
+              href="/settings"
+              aria-label="设置"
+              className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface)] transition"
             >
-              退出
-            </button>
-          </form>
+              <Settings className="size-4" />
+            </Link>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="h-9 px-3 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-surface)] transition"
+              >
+                退出
+              </button>
+            </form>
+          </div>
         </header>
 
         {needsSeeding ? (
@@ -70,40 +91,66 @@ export default async function DashboardPage() {
             <div className="font-medium">⚠️ 词库还没导入</div>
             <p className="text-sm text-[var(--color-fg-muted)] leading-relaxed">
               管理员请调用 <code>POST /api/admin/seed</code> 带 header{" "}
-              <code>x-admin-secret</code> 完成首次词库导入（见 README）。
+              <code>x-admin-secret</code>（15k 词需要循环调用直到 done:true）。
             </p>
           </section>
         ) : (
           <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-6">
             <div>
-              <div className="text-sm text-[var(--color-fg-muted)]">
+              <div className="flex items-center gap-2 text-sm text-[var(--color-fg-muted)]">
                 今日任务
+                {mode === "endless" && (
+                  <span className="text-[0.65rem] uppercase tracking-wider bg-[var(--color-brand)]/10 text-[var(--color-brand)] px-2 py-0.5 rounded">
+                    无尽模式
+                  </span>
+                )}
               </div>
               <div className="mt-1 text-3xl font-semibold">
-                {dueCount + remainingNew}{" "}
-                <span className="text-base font-normal text-[var(--color-fg-muted)]">
-                  张卡片
-                </span>
+                {mode === "endless" ? (
+                  <>
+                    {dueCount > 0 ? dueCount : "∞"}{" "}
+                    <span className="text-base font-normal text-[var(--color-fg-muted)]">
+                      {dueCount > 0 ? "待复习 + 新词随学随有" : "张新词随时可学"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {dueCount + (Number.isFinite(remainingNew) ? remainingNew : 0)}{" "}
+                    <span className="text-base font-normal text-[var(--color-fg-muted)]">
+                      张卡片
+                    </span>
+                  </>
+                )}
               </div>
-              <div className="mt-1 text-sm text-[var(--color-fg-muted)]">
-                {remainingNew} 新词 · {dueCount} 待复习
-              </div>
+              {mode !== "endless" && (
+                <div className="mt-1 text-sm text-[var(--color-fg-muted)]">
+                  {Number.isFinite(remainingNew) ? remainingNew : 0} 新词 ·{" "}
+                  {dueCount} 待复习
+                </div>
+              )}
             </div>
             <Link
-              href="/study"
+              href={canStudy ? "/study" : "/settings"}
               className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--color-brand)] px-6 text-sm font-medium text-white hover:bg-[var(--color-brand-hover)] transition"
             >
-              开始学习 →
+              {canStudy ? "开始学习 →" : "去设置调整 →"}
             </Link>
           </section>
         )}
 
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Stat label="今日已学" value={String(newDoneToday + reviewDoneToday)} />
+          <Stat
+            label="今日已学"
+            value={String(newDoneToday + reviewDoneToday)}
+          />
           <Stat
             label="CEFR 水平"
             value={user?.cefrLevel ?? "—"}
-            hint={user?.onboardedAt ? undefined : "做一次测评"}
+            hint={
+              user?.estVocabSize
+                ? `约 ${user.estVocabSize.toLocaleString()} 词`
+                : undefined
+            }
           />
           <Stat label="词库总量" value={totalWords.toLocaleString()} />
         </section>

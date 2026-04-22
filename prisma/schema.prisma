@@ -22,6 +22,7 @@ model User {
   estVocabSize    Int? // estimated known-word count from placement
   dailyNewGoal    Int       @default(10)
   dailyReviewCap  Int       @default(50)
+  mode            String    @default("endless") // "normal" | "endless"
   interests       String[]  @default([]) // ["daily","news","business","academic","travel","tech"]
   onboardedAt     DateTime?
 
