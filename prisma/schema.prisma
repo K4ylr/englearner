@@ -3,8 +3,13 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Runtime app traffic uses the pooled URL (serverless-friendly).
+  url       = env("DATABASE_URL")
+  // Migrations and introspection need a direct connection because Neon's
+  // pooler (PgBouncer transaction mode) can't hold session-level advisory
+  // locks. Vercel's Neon integration injects DATABASE_URL_UNPOOLED automatically.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // ---------- Auth.js v5 required tables ----------
