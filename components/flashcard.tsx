@@ -57,6 +57,7 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
           body: JSON.stringify({
             wordId: current.wordId,
             rating,
+            mode: "recognize",
             durationMs,
           }),
         });

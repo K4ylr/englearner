@@ -61,8 +61,8 @@ export default async function SettingsPage() {
   });
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-10">
-      <div className="max-w-xl mx-auto space-y-8">
+    <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-10">
+      <div className="max-w-3xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold">设置</h1>

@@ -143,6 +143,7 @@ model ReviewLog {
   difficulty Float
   elapsed    Int
   scheduled  Int
+  mode       String   @default("recognize") // "recognize" | "spell" | "dictate"
   reviewedAt DateTime @default(now())
   durationMs Int?
 

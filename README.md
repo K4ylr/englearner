@@ -21,6 +21,15 @@
 - 闪卡 UI：有道英美发音、YouGlish 真实语境视频、键盘 1/2/3/4 评分
 - Dashboard 显示今日任务数并链接到 `/study`
 
+**Phase D — OAuth + Recall 模式 ✅**
+
+- Google / GitHub OAuth 登录（邮箱魔法链接仍保留）
+- 拼写模式：看中文 → 输入英文，Levenshtein 自动评分
+- 听写模式：听音 → 输入英文，自动播音 + `R` 重播
+- `/study` 顶部 pill 切换 `识别 / 拼写 / 听写`，localStorage 记住上次选择
+- `/settings`, `/onboarding/*` 宽度从 `max-w-xl` 放到 `max-w-3xl`
+- `ReviewLog.mode` 字段区分三种模式（需手动贴 SQL 到 Neon）
+
 **Phase C — 个性化 + 词库扩容 ✅**
 
 - 词库扩到 **14,973 词**（A1-C1 + CET-4/6 + TOEFL/IELTS/GRE 标签）
@@ -56,6 +65,27 @@ pnpm dev
 | `AUTH_RESEND_KEY` | Resend 控制台 (https://resend.com/api-keys) 免费 3000/月 |
 | `EMAIL_FROM` | 邮件发件人。先用 `onboarding@resend.dev` 测试，生产换自己验证过的域名 |
 | `ADMIN_SECRET` | 保护 `/api/admin/seed`。`openssl rand -base64 24` 生成 |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | *(可选)* Google OAuth；不填就隐藏 Google 登录按钮 |
+| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | *(可选)* GitHub OAuth；不填就隐藏 GitHub 按钮 |
+
+### 接入 OAuth（可选）
+
+**Google：** https://console.cloud.google.com/apis/credentials
+1. Create Credentials → OAuth client ID → Web application
+2. Authorized redirect URI: `https://<你的 Vercel 域名>/api/auth/callback/google`
+3. 复制 Client ID / Client Secret 到 Vercel env: `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
+4. Redeploy
+
+**GitHub：** https://github.com/settings/developers → New OAuth App
+1. Homepage URL: `https://<你的 Vercel 域名>`
+2. Authorization callback URL: `https://<你的 Vercel 域名>/api/auth/callback/github`
+3. 复制 Client ID / generate 一个 Client Secret → Vercel env: `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`
+4. Redeploy
+
+同邮箱的账号会自动合并（用过邮箱魔法链接登录，再用 Google 登录同邮箱不会产生重复账户）。
+
+**微信登录本期不做**，原因：微信开放平台网站应用要求企业主体 + ICP 备案 Chinese domain + 审核。
+等有企业主体再接入。
 
 ## 部署到 Vercel
 
@@ -73,6 +103,16 @@ pnpm dev
    ```
    或者把 build 命令改成 `pnpm prisma migrate deploy && pnpm build`。
 7. 访问部署后的域名 → `/login` → 输入邮箱 → 查收登录链接 → 进入 `/dashboard` ✅
+
+### Phase D schema 升级（手工跑一次）
+
+Phase D 新加了 `ReviewLog.mode` 列。首次部署 Phase D 前需在 **Neon SQL Editor** 里执行：
+
+```sql
+ALTER TABLE "ReviewLog" ADD COLUMN "mode" TEXT NOT NULL DEFAULT 'recognize';
+```
+
+不跑的话 `/api/study/review` 会报列不存在错误。以后 schema 再升级同样处理。
 
 ### 导入词库（首次 or 从 3k 升到 15k）
 

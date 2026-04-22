@@ -13,6 +13,7 @@ const BodySchema = z.object({
     z.literal(4),
   ]),
   durationMs: z.number().int().nonnegative().optional(),
+  mode: z.enum(["recognize", "spell", "dictate"]).optional(),
 });
 
 export async function POST(req: Request) {
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const { wordId, rating, durationMs } = parsed.data;
+  const { wordId, rating, durationMs, mode } = parsed.data;
 
   // Load existing UserWord or start a blank one.
   const existing = await prisma.userWord.findUnique({
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
         difficulty: next.difficulty,
         elapsed: next.elapsed,
         scheduled: next.scheduled,
+        mode: mode ?? "recognize",
         reviewedAt: now,
         durationMs: durationMs ?? null,
       },
