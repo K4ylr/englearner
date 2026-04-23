@@ -106,11 +106,12 @@ pnpm dev
 
 ### Phase D schema 升级（手工跑一次）
 
-Phase D 新加了 `ReviewLog.mode` 列 + `User.revealHoldMs` 列。首次部署 Phase D 前需在 **Neon SQL Editor** 里执行：
+Phase D 新加了 `ReviewLog.mode` 列、`User.revealHoldMs` 列和 `User.swipeRightIsKnow` 列。首次部署 Phase D 前需在 **Neon SQL Editor** 里执行：
 
 ```sql
 ALTER TABLE "ReviewLog" ADD COLUMN "mode" TEXT NOT NULL DEFAULT 'recognize';
 ALTER TABLE "User" ADD COLUMN "revealHoldMs" INTEGER NOT NULL DEFAULT 1500;
+ALTER TABLE "User" ADD COLUMN "swipeRightIsKnow" BOOLEAN NOT NULL DEFAULT true;
 ```
 
 不跑的话 `/api/study/review` 会报列不存在错误。以后 schema 再升级同样处理。

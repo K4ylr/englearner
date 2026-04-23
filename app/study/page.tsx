@@ -36,10 +36,11 @@ export default async function StudyPage({
     getTodayQueue(session.user.id),
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { revealHoldMs: true },
+      select: { revealHoldMs: true, swipeRightIsKnow: true },
     }),
   ]);
   const revealHoldMs = user?.revealHoldMs ?? 1500;
+  const swipeRightIsKnow = user?.swipeRightIsKnow ?? true;
 
   return (
     <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-6">
@@ -55,7 +56,11 @@ export default async function StudyPage({
           <StudyModeSelector current={mode} />
         </div>
         {mode === "recognize" ? (
-          <Flashcard initialQueue={queue} revealHoldMs={revealHoldMs} />
+          <Flashcard
+            initialQueue={queue}
+            revealHoldMs={revealHoldMs}
+            swipeRightIsKnow={swipeRightIsKnow}
+          />
         ) : (
           <RecallCard mode={mode} initialQueue={queue} />
         )}

@@ -8,6 +8,7 @@ export type SettingsDefaults = {
   dailyNewGoal: number;
   dailyReviewCap: number;
   revealHoldMs: number;
+  swipeRightIsKnow: boolean;
   topics: string[];
 };
 
@@ -31,6 +32,9 @@ export function SettingsForm({
   const [newGoal, setNewGoal] = useState(defaults.dailyNewGoal);
   const [reviewCap, setReviewCap] = useState(defaults.dailyReviewCap);
   const [revealHold, setRevealHold] = useState(defaults.revealHoldMs);
+  const [swipeRightIsKnow, setSwipeRightIsKnow] = useState(
+    defaults.swipeRightIsKnow
+  );
   const [selected, setSelected] = useState<Set<string>>(
     new Set(defaults.topics)
   );
@@ -128,8 +132,35 @@ export function SettingsForm({
           suffix="毫秒"
         />
         <p className="text-xs text-[var(--color-fg-muted)] mt-2 leading-relaxed">
-          识别模式下选择&ldquo;会/不会&rdquo;后，卡片会停留一段时间让你再看一眼释义与例句；
+          识别模式下选择&ldquo;会&rdquo;之后卡片会停留一段时间让你再看一眼释义；
           按 Space / Enter 可立即进入下一张。设为 0 就不等待。
+          选了&ldquo;不会&rdquo;时不自动跳转——卡片会一直保留释义等你手动进下一张。
+        </p>
+      </Section>
+
+      {/* Swipe direction */}
+      <Section title="滑动方向偏好">
+        <input
+          type="hidden"
+          name="swipeRightIsKnow"
+          value={swipeRightIsKnow ? "1" : "0"}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <SwipeCard
+            active={swipeRightIsKnow}
+            onClick={() => setSwipeRightIsKnow(true)}
+            title="右滑 = 会"
+            desc="左滑 = 不会（默认，和 Tinder 一样）"
+          />
+          <SwipeCard
+            active={!swipeRightIsKnow}
+            onClick={() => setSwipeRightIsKnow(false)}
+            title="右滑 = 不会"
+            desc="左滑 = 会（惯用右手也可以把不要的甩到右边）"
+          />
+        </div>
+        <p className="text-xs text-[var(--color-fg-muted)] mt-2 leading-relaxed">
+          仅影响识别模式的手势（和 J/K 键盘无关）。
         </p>
       </Section>
 
@@ -200,6 +231,36 @@ function Section({
       <h2 className="text-sm font-medium mb-3">{title}</h2>
       {children}
     </div>
+  );
+}
+
+function SwipeCard({
+  active,
+  onClick,
+  title,
+  desc,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "text-left rounded-xl border p-4 transition",
+        active
+          ? "border-[var(--color-brand)] bg-[var(--color-brand)]/5"
+          : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-fg-muted)]"
+      )}
+    >
+      <div className="font-medium text-sm">{title}</div>
+      <div className="text-xs text-[var(--color-fg-muted)] mt-1 leading-relaxed">
+        {desc}
+      </div>
+    </button>
   );
 }
 

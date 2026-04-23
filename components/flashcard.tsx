@@ -37,9 +37,11 @@ const RATING_META: Record<
 export function Flashcard({
   initialQueue,
   revealHoldMs,
+  swipeRightIsKnow,
 }: {
   initialQueue: QueueItem[];
   revealHoldMs: number;
+  swipeRightIsKnow: boolean;
 }) {
   const router = useRouter();
   const [queue] = useState<QueueItem[]>(initialQueue);
@@ -115,7 +117,12 @@ export function Flashcard({
           correct: s.correct + (rating >= 3 ? 1 : 0),
           total: s.total + 1,
         }));
-        if (revealHoldMs <= 0) {
+        // Wrong answers (Again) keep the definition on screen indefinitely —
+        // the user asked to study it before moving on. Only auto-advance for
+        // ratings where the user says they knew it (Hard/Good/Easy).
+        if (rating === 1) {
+          // no-op: wait for manual advance (swipe / Space / Enter / click)
+        } else if (revealHoldMs <= 0) {
           advance();
         } else {
           holdTimerRef.current = window.setTimeout(advance, revealHoldMs);
@@ -201,7 +208,8 @@ export function Flashcard({
         // in place (the card "reappears" with the translation shown).
         setDragX(0);
         setExitDir(null);
-        submit(dir === "right" ? 3 : 1);
+        const knowsDir: "left" | "right" = swipeRightIsKnow ? "right" : "left";
+        submit(dir === knowsDir ? 3 : 1);
       }
     }, 260);
   }
@@ -378,24 +386,35 @@ export function Flashcard({
           flipped ? "lg:grid lg:grid-cols-[1.1fr_1fr] lg:gap-10" : "flex flex-col"
         )}
       >
-        {/* Swipe direction overlays — fade in as the user drags past ~40px */}
+        {/* Swipe direction overlays — fade in as the user drags past ~40px.
+            Labels/colors follow the user's swipeRightIsKnow preference. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute top-6 right-6 rounded-lg border-4 border-emerald-500 px-3 py-1 text-3xl font-bold text-emerald-500 rotate-12"
+          className={cn(
+            "pointer-events-none absolute top-6 right-6 rounded-lg border-4 px-3 py-1 text-3xl font-bold rotate-12",
+            swipeRightIsKnow
+              ? "border-emerald-500 text-emerald-500"
+              : "border-rose-500 text-rose-500"
+          )}
           style={{
             opacity: Math.max(0, Math.min(1, (dragX - 40) / 80)),
           }}
         >
-          会 ✓
+          {swipeRightIsKnow ? "会 ✓" : "不会 ✗"}
         </div>
         <div
           aria-hidden
-          className="pointer-events-none absolute top-6 left-6 rounded-lg border-4 border-rose-500 px-3 py-1 text-3xl font-bold text-rose-500 -rotate-12"
+          className={cn(
+            "pointer-events-none absolute top-6 left-6 rounded-lg border-4 px-3 py-1 text-3xl font-bold -rotate-12",
+            swipeRightIsKnow
+              ? "border-rose-500 text-rose-500"
+              : "border-emerald-500 text-emerald-500"
+          )}
           style={{
             opacity: Math.max(0, Math.min(1, (-dragX - 40) / 80)),
           }}
         >
-          不会 ✗
+          {swipeRightIsKnow ? "不会 ✗" : "会 ✓"}
         </div>
         {/* Left / top panel: the lemma itself */}
         <div
@@ -487,7 +506,9 @@ export function Flashcard({
             ]}
           />
           <p className="text-center text-xs text-[var(--color-fg-muted)] sm:hidden">
-            👈 向左滑 = 不会　向右滑 = 会 👉
+            {swipeRightIsKnow
+              ? "👈 向左滑 = 不会　向右滑 = 会 👉"
+              : "👈 向左滑 = 会　向右滑 = 不会 👉"}
           </p>
         </div>
       ) : holding ? (
@@ -505,7 +526,13 @@ export function Flashcard({
           </button>
           <KeyboardHints
             lines={[
-              { keys: ["Space", "Enter"], desc: "跳过等待进入下一张" },
+              {
+                keys: ["Space", "Enter"],
+                desc:
+                  holdingRating === 1
+                    ? "记住了再进入下一张"
+                    : "跳过等待进入下一张",
+              },
             ]}
           />
         </div>

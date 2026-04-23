@@ -30,6 +30,7 @@ model User {
   mode            String    @default("endless") // "normal" | "endless"
   interests       String[]  @default([]) // ["daily","news","business","academic","travel","tech"]
   revealHoldMs    Int       @default(1500) // auto-advance delay after rating (0 = instant)
+  swipeRightIsKnow Boolean  @default(true) // true: 右滑=会/左滑=不会; false: swapped
   onboardedAt     DateTime?
 
   accounts         Account[]

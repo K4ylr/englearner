@@ -29,6 +29,7 @@ async function saveSettings(formData: FormData): Promise<void> {
     0,
     5000
   );
+  const swipeRightIsKnow = formData.get("swipeRightIsKnow") !== "0";
 
   await prisma.user.update({
     where: { id: session.user.id },
@@ -37,6 +38,7 @@ async function saveSettings(formData: FormData): Promise<void> {
       dailyNewGoal,
       dailyReviewCap,
       revealHoldMs,
+      swipeRightIsKnow,
       interests,
     },
   });
@@ -61,6 +63,7 @@ export default async function SettingsPage() {
       dailyNewGoal: true,
       dailyReviewCap: true,
       revealHoldMs: true,
+      swipeRightIsKnow: true,
       mode: true,
       interests: true,
       onboardedAt: true,
@@ -114,6 +117,7 @@ export default async function SettingsPage() {
             dailyNewGoal: user?.dailyNewGoal ?? 10,
             dailyReviewCap: user?.dailyReviewCap ?? 50,
             revealHoldMs: user?.revealHoldMs ?? 1500,
+            swipeRightIsKnow: user?.swipeRightIsKnow ?? true,
             topics: user?.interests ?? [],
           }}
         />
