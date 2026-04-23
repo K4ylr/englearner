@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Volume2, RefreshCw } from "lucide-react";
 import { PronounceButton } from "./pronounce-button";
-import { YouGlishEmbed } from "./youglish-embed";
+import { ContextClips } from "./context-clips";
 import { Definition } from "./definition";
 import { gradeAnswer, type Rating } from "@/lib/grading";
 import { cn } from "@/lib/utils";
@@ -403,7 +403,7 @@ export function RecallCard({
                   </ul>
                 </div>
               )}
-              <YouGlishEmbed word={current.lemma} />
+              <ContextClips word={current.lemma} />
             </div>
           </>
         )}

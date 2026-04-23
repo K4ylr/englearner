@@ -90,6 +90,7 @@ model Word {
   topics    String[] @default([]) // "daily","news","business","academic","travel","tech"
   audioUs   String? // can be derived, but cache URL
   audioUk   String?
+  contextClipIds String[] @default([]) // cached getyarn.io clip ids for TV/movie snippets
 
   examples  Example[]
   userWords UserWord[]
