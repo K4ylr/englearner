@@ -51,6 +51,17 @@ export function Flashcard({
   const startRef = useRef<number>(Date.now());
   const holdTimerRef = useRef<number | null>(null);
 
+  // --- Touch/pointer swipe gestures (Tinder-style) ----------------------
+  // Card follows finger horizontally with a rotation. Past threshold (or fast
+  // flick), it flies off in that direction and we rate: right = Good, left =
+  // Again. Mid-hold swipe just advances like Space/Enter.
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [exitDir, setExitDir] = useState<"left" | "right" | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const dragAxisRef = useRef<"pending" | "horizontal" | "vertical">("pending");
+  const exitTimerRef = useRef<number | null>(null);
+
   const current = queue[idx];
   const done = idx >= queue.length;
   const holding = holdingRating !== null;
@@ -62,12 +73,22 @@ export function Flashcard({
     }
   }, []);
 
-  useEffect(() => () => clearHoldTimer(), [clearHoldTimer]);
+  useEffect(
+    () => () => {
+      clearHoldTimer();
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current);
+      }
+    },
+    [clearHoldTimer]
+  );
 
   const advance = useCallback(() => {
     clearHoldTimer();
     setHoldingRating(null);
     setFlipped(false);
+    setDragX(0);
+    setExitDir(null);
     setIdx((i) => i + 1);
     startRef.current = Date.now();
   }, [clearHoldTimer]);
@@ -105,6 +126,85 @@ export function Flashcard({
     },
     [current, submitting, holding, revealHoldMs, advance]
   );
+
+  // --- Swipe handlers (defined after submit/advance so closure is fresh).
+  // Not wrapped in useCallback: the card re-renders on every drag tick
+  // anyway (dragX is state), so referential stability buys nothing.
+  const SWIPE_THRESHOLD_PX = 110;
+  const SWIPE_VELOCITY = 0.5; // px per ms
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (exitDir) return;
+    const target = e.target as HTMLElement;
+    // Let buttons, links, iframes, form fields handle their own input.
+    if (target.closest("button, a, input, select, textarea, iframe")) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      t: performance.now(),
+    };
+    dragAxisRef.current = "pending";
+    setDragging(true);
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging || !dragStartRef.current) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+
+    // First meaningful movement: decide horizontal (swipe) vs vertical
+    // (scroll). If vertical, bail so the page can scroll normally.
+    if (dragAxisRef.current === "pending") {
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      if (absDx < 8 && absDy < 8) return;
+      if (absDy > absDx) {
+        dragAxisRef.current = "vertical";
+        setDragging(false);
+        setDragX(0);
+        dragStartRef.current = null;
+        return;
+      }
+      dragAxisRef.current = "horizontal";
+    }
+    setDragX(dx);
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging || !dragStartRef.current) {
+      setDragging(false);
+      return;
+    }
+    const dx = e.clientX - dragStartRef.current.x;
+    const dt = Math.max(performance.now() - dragStartRef.current.t, 1);
+    const velocity = Math.abs(dx) / dt;
+    dragStartRef.current = null;
+    setDragging(false);
+
+    const commit =
+      Math.abs(dx) > SWIPE_THRESHOLD_PX || velocity > SWIPE_VELOCITY;
+    if (!commit) {
+      setDragX(0); // spring back
+      return;
+    }
+
+    const dir: "left" | "right" = dx > 0 ? "right" : "left";
+    setExitDir(dir);
+    exitTimerRef.current = window.setTimeout(() => {
+      exitTimerRef.current = null;
+      if (holding) {
+        advance();
+      } else {
+        // Reset drag; submit() enters hold phase so the definition reveals
+        // in place (the card "reappears" with the translation shown).
+        setDragX(0);
+        setExitDir(null);
+        submit(dir === "right" ? 3 : 1);
+      }
+    }, 260);
+  }
 
   // Keyboard flow:
   //   Space / Enter   — flip; after flip, Space = Good (3). During hold, advance early.
@@ -253,13 +353,50 @@ export function Flashcard({
       </header>
 
       {/* Card — goes two-column on wide screens: word+pronounce on the
-          left, definition/examples/video on the right (after flip). */}
+          left, definition/examples/video on the right (after flip).
+          Wrapped in pointer handlers for Tinder-style swipe gestures. */}
       <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        style={{
+          transform: exitDir
+            ? `translate3d(${
+                exitDir === "right" ? "130%" : "-130%"
+              }, 0, 0) rotate(${exitDir === "right" ? 22 : -22}deg)`
+            : dragX !== 0
+            ? `translate3d(${dragX}px, 0, 0) rotate(${dragX / 22}deg)`
+            : undefined,
+          transition: dragging
+            ? "none"
+            : "transform 280ms cubic-bezier(.22,.61,.36,1)",
+          touchAction: "pan-y",
+        }}
         className={cn(
-          "rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] min-h-[560px] p-6 sm:p-10",
+          "relative rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] min-h-[560px] p-6 sm:p-10 select-none",
           flipped ? "lg:grid lg:grid-cols-[1.1fr_1fr] lg:gap-10" : "flex flex-col"
         )}
       >
+        {/* Swipe direction overlays — fade in as the user drags past ~40px */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-6 right-6 rounded-lg border-4 border-emerald-500 px-3 py-1 text-3xl font-bold text-emerald-500 rotate-12"
+          style={{
+            opacity: Math.max(0, Math.min(1, (dragX - 40) / 80)),
+          }}
+        >
+          会 ✓
+        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-6 left-6 rounded-lg border-4 border-rose-500 px-3 py-1 text-3xl font-bold text-rose-500 -rotate-12"
+          style={{
+            opacity: Math.max(0, Math.min(1, (-dragX - 40) / 80)),
+          }}
+        >
+          不会 ✗
+        </div>
         {/* Left / top panel: the lemma itself */}
         <div
           className={cn(
@@ -349,6 +486,9 @@ export function Flashcard({
               { keys: ["K", "→"], desc: "会" },
             ]}
           />
+          <p className="text-center text-xs text-[var(--color-fg-muted)] sm:hidden">
+            👈 向左滑 = 不会　向右滑 = 会 👉
+          </p>
         </div>
       ) : holding ? (
         <div className="space-y-3">
