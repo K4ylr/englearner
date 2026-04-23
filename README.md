@@ -106,13 +106,24 @@ pnpm dev
 
 ### Phase D schema 升级（手工跑一次）
 
-Phase D 新加了若干列，首次部署前需在 **Neon SQL Editor** 里执行：
+### Phase D schema 升级
+
+以前需要手工在 Neon SQL Editor 里 `ALTER TABLE`，现在 `build` 命令改成了
+`prisma generate && prisma migrate deploy && next build`，Vercel 每次 deploy
+会自动把 `prisma/migrations/*` 里还没跑过的 migration 应用到 Neon（走
+`DATABASE_URL_UNPOOLED` 直连，绕开 Neon pooler 不支持 advisory lock 的问题）。
+
+**如果 Vercel 环境变量里没有 `DATABASE_URL_UNPOOLED`**（Neon 集成通常会自动注入；
+没有的话去 Neon 控制台 → Connection Details → 勾 "Pooled: off" 拿到 URL，手动填到
+Vercel env），build 会挂在 migrate deploy 报 P1002。
+
+历史列在这里备个忘（已经跑过的不用再跑）：
 
 ```sql
-ALTER TABLE "ReviewLog" ADD COLUMN "mode" TEXT NOT NULL DEFAULT 'recognize';
-ALTER TABLE "User" ADD COLUMN "revealHoldMs" INTEGER NOT NULL DEFAULT 1500;
-ALTER TABLE "User" ADD COLUMN "swipeRightIsKnow" BOOLEAN NOT NULL DEFAULT true;
-ALTER TABLE "Word" ADD COLUMN "contextClipIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "ReviewLog" ADD COLUMN IF NOT EXISTS "mode" TEXT NOT NULL DEFAULT 'recognize';
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "revealHoldMs" INTEGER NOT NULL DEFAULT 1500;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "swipeRightIsKnow" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "Word" ADD COLUMN IF NOT EXISTS "contextClipIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 ```
 
 不跑的话 `/api/study/review` 会报列不存在错误。以后 schema 再升级同样处理。
