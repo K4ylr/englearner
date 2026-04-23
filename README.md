@@ -67,6 +67,7 @@ pnpm dev
 | `ADMIN_SECRET` | 保护 `/api/admin/seed`。`openssl rand -base64 24` 生成 |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | *(可选)* Google OAuth；不填就隐藏 Google 登录按钮 |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | *(可选)* GitHub OAuth；不填就隐藏 GitHub 按钮 |
+| `YOUTUBE_API_KEY` | *(可选)* YouTube Data API v3。闪卡下方的"看英美剧怎么说"嵌入式播放器靠这个；不填的话按钮改显示外链兜底。免费额度 10k units/day（搜一次 100 units = 100 次新词/天，缓存后不再调）。[Google Cloud Console → 启用 "YouTube Data API v3" → Credentials → Create API key](https://console.cloud.google.com/apis/credentials) |
 
 ### 接入 OAuth（可选）
 

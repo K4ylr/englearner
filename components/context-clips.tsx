@@ -3,16 +3,19 @@
 import { useEffect, useState } from "react";
 import { Play, ExternalLink, Shuffle } from "lucide-react";
 
-// Embed a TV/movie snippet where a native speaker says this word, via
-// getyarn.io's public /yarn-clip/<id>/embed page. The clip IDs come from
-// our server-side scrape API, which caches results per-word in the DB.
-// If nothing usable comes back, we fall back to outbound search links.
+// Embed a short YouTube clip where the word appears (TV scene, vocab
+// explainer, etc.) via youtube.com/embed. Video IDs come from our
+// server-side Data API call, cached per-word in the DB.
+//
+// If nothing usable comes back (quota exhausted, key missing, search
+// returned zero embeddable shorts) we fall back to outbound search links:
+// YouTube, YouGlish, PlayPhrase.
 
 type State =
   | { kind: "closed" }
   | { kind: "loading" }
-  | { kind: "ready"; clipIds: string[]; idx: number }
-  | { kind: "empty" } // API returned no clips
+  | { kind: "ready"; videoIds: string[]; idx: number }
+  | { kind: "empty" }
   | { kind: "error" };
 
 export function ContextClips({ word }: { word: string }) {
@@ -21,12 +24,12 @@ export function ContextClips({ word }: { word: string }) {
   useEffect(() => {
     if (state.kind !== "loading") return;
     let cancelled = false;
-    fetch(`/api/clips/yarn?word=${encodeURIComponent(word)}`)
+    fetch(`/api/clips/youtube?word=${encodeURIComponent(word)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((data: { clipIds: string[] }) => {
+      .then((data: { videoIds: string[] }) => {
         if (cancelled) return;
-        if (data.clipIds && data.clipIds.length > 0) {
-          setState({ kind: "ready", clipIds: data.clipIds, idx: 0 });
+        if (data.videoIds && data.videoIds.length > 0) {
+          setState({ kind: "ready", videoIds: data.videoIds, idx: 0 });
         } else {
           setState({ kind: "empty" });
         }
@@ -39,12 +42,14 @@ export function ContextClips({ word }: { word: string }) {
     };
   }, [state.kind, word]);
 
-  const searchUrl = `https://getyarn.io/yarn-find?text=${encodeURIComponent(word)}`;
+  const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+    `"${word}" scene`
+  )}`;
+  const youglishUrl = `https://youglish.com/pronounce/${encodeURIComponent(
+    word
+  )}/english`;
   const playphraseUrl = `https://www.playphrase.me/#/search?q=${encodeURIComponent(
     word
-  )}`;
-  const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-    word + " scene"
   )}`;
 
   if (state.kind === "closed") {
@@ -59,9 +64,9 @@ export function ContextClips({ word }: { word: string }) {
           看英美剧怎么说
         </button>
         <OutboundLinks
-          getyarn={searchUrl}
-          playphrase={playphraseUrl}
           youtube={youtubeUrl}
+          youglish={youglishUrl}
+          playphrase={playphraseUrl}
         />
       </div>
     );
@@ -70,7 +75,7 @@ export function ContextClips({ word }: { word: string }) {
   if (state.kind === "loading") {
     return (
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-fg-muted)]">
-        搜索英美剧片段中…
+        搜索视频片段中…
       </div>
     );
   }
@@ -80,32 +85,31 @@ export function ContextClips({ word }: { word: string }) {
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-fg-muted)] space-y-2">
         <div>
           {state.kind === "empty"
-            ? "没找到对应的剧集片段。换几个站试试 👇"
-            : "片段加载失败，换几个站试试 👇"}
+            ? "没找到合适的视频片段。换几个站试试 👇"
+            : "视频加载失败，换几个站试试 👇"}
         </div>
         <OutboundLinks
-          getyarn={searchUrl}
-          playphrase={playphraseUrl}
           youtube={youtubeUrl}
+          youglish={youglishUrl}
+          playphrase={playphraseUrl}
           prominent
         />
       </div>
     );
   }
 
-  // ready
-  const currentId = state.clipIds[state.idx];
-  const embedSrc = `https://getyarn.io/yarn-clip/${encodeURIComponent(
+  const currentId = state.videoIds[state.idx];
+  const embedSrc = `https://www.youtube.com/embed/${encodeURIComponent(
     currentId
-  )}/embed`;
+  )}`;
   return (
     <div className="space-y-2">
       <div className="rounded-lg border border-[var(--color-border)] overflow-hidden bg-black aspect-video">
         <iframe
           key={currentId}
           src={embedSrc}
-          title={`TV/movie clip for ${word}`}
-          allow="autoplay; encrypted-media"
+          title={`YouTube clip for ${word}`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           className="size-full"
         />
@@ -113,28 +117,28 @@ export function ContextClips({ word }: { word: string }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
           <span className="tabular-nums">
-            {state.idx + 1} / {state.clipIds.length}
+            {state.idx + 1} / {state.videoIds.length}
           </span>
-          {state.clipIds.length > 1 && (
+          {state.videoIds.length > 1 && (
             <button
               type="button"
               onClick={() =>
                 setState({
                   ...state,
-                  idx: (state.idx + 1) % state.clipIds.length,
+                  idx: (state.idx + 1) % state.videoIds.length,
                 })
               }
               className="inline-flex items-center gap-1 h-7 px-2 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-border)] transition"
             >
               <Shuffle className="size-3" />
-              换一个例子
+              换一个
             </button>
           )}
         </div>
         <OutboundLinks
-          getyarn={searchUrl}
-          playphrase={playphraseUrl}
           youtube={youtubeUrl}
+          youglish={youglishUrl}
+          playphrase={playphraseUrl}
         />
       </div>
     </div>
@@ -142,14 +146,14 @@ export function ContextClips({ word }: { word: string }) {
 }
 
 function OutboundLinks({
-  getyarn,
-  playphrase,
   youtube,
+  youglish,
+  playphrase,
   prominent = false,
 }: {
-  getyarn: string;
-  playphrase: string;
   youtube: string;
+  youglish: string;
+  playphrase: string;
   prominent?: boolean;
 }) {
   const base = "inline-flex items-center gap-1 transition";
@@ -158,17 +162,17 @@ function OutboundLinks({
     : `${base} text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]`;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <a href={getyarn} target="_blank" rel="noopener noreferrer" className={cls}>
+      <a href={youtube} target="_blank" rel="noopener noreferrer" className={cls}>
         <ExternalLink className="size-3" />
-        getyarn
+        YouTube 搜索
+      </a>
+      <a href={youglish} target="_blank" rel="noopener noreferrer" className={cls}>
+        <ExternalLink className="size-3" />
+        YouGlish
       </a>
       <a href={playphrase} target="_blank" rel="noopener noreferrer" className={cls}>
         <ExternalLink className="size-3" />
         PlayPhrase
-      </a>
-      <a href={youtube} target="_blank" rel="noopener noreferrer" className={cls}>
-        <ExternalLink className="size-3" />
-        YouTube 搜索
       </a>
     </div>
   );
