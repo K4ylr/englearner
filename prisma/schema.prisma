@@ -29,6 +29,7 @@ model User {
   dailyReviewCap  Int       @default(50)
   mode            String    @default("endless") // "normal" | "endless"
   interests       String[]  @default([]) // ["daily","news","business","academic","travel","tech"]
+  revealHoldMs    Int       @default(1500) // auto-advance delay after rating (0 = instant)
   onboardedAt     DateTime?
 
   accounts         Account[]

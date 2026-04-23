@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Volume2, RefreshCw } from "lucide-react";
 import { PronounceButton } from "./pronounce-button";
 import { YouGlishEmbed } from "./youglish-embed";
+import { Definition } from "./definition";
 import { gradeAnswer, type Rating } from "@/lib/grading";
 import { cn } from "@/lib/utils";
 
@@ -286,13 +287,18 @@ export function RecallCard({
                   看中文，拼英文
                 </div>
                 {current.defZh ? (
-                  <div className="text-3xl sm:text-4xl leading-relaxed max-w-xl">
-                    {current.defZh}
-                  </div>
+                  <Definition
+                    text={current.defZh}
+                    size="xl"
+                    className="max-w-xl text-left mx-auto"
+                  />
                 ) : (
-                  <div className="text-xl text-[var(--color-fg-muted)] max-w-xl">
-                    {current.defEn}
-                  </div>
+                  <Definition
+                    text={current.defEn}
+                    size="lg"
+                    muted
+                    className="max-w-xl text-left mx-auto"
+                  />
                 )}
                 {current.examples[0] && (
                   <div className="text-sm text-[var(--color-fg-muted)] border-l-2 border-[var(--color-border)] pl-3 max-w-xl text-left">
@@ -364,7 +370,7 @@ export function RecallCard({
                   <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">
                     中文释义
                   </div>
-                  <div className="text-xl leading-relaxed">{current.defZh}</div>
+                  <Definition text={current.defZh} size="lg" />
                 </div>
               )}
               {current.defEn && (
@@ -372,9 +378,7 @@ export function RecallCard({
                   <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">
                     English
                   </div>
-                  <div className="text-sm leading-relaxed text-[var(--color-fg-muted)]">
-                    {current.defEn}
-                  </div>
+                  <Definition text={current.defEn} size="sm" muted />
                 </div>
               )}
               {current.examples.length > 0 && (

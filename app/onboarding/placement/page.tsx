@@ -14,7 +14,7 @@ export default async function PlacementPage() {
 
   return (
     <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-8">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <header className="mb-8 text-center space-y-2">
           <h1 className="text-2xl font-semibold">先测个水平</h1>
           <p className="text-sm text-[var(--color-fg-muted)] leading-relaxed">

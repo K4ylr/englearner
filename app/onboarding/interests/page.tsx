@@ -44,7 +44,7 @@ export default async function InterestsPage() {
 
   return (
     <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-10">
-      <div className="max-w-3xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-8">
         <header className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 text-xs text-[var(--color-fg-muted)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full px-3 py-1">
             <span>你的水平：{user?.cefrLevel ?? "未知"}</span>

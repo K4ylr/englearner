@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { getTodayQueue } from "@/lib/scheduler";
 import { Flashcard } from "@/components/flashcard";
 import { RecallCard } from "@/components/recall-card";
@@ -31,7 +32,14 @@ export default async function StudyPage({
   // If no mode in URL, client component will check localStorage and push
   // the remembered mode into the URL. Default render uses "recognize".
   const mode: Mode = requestedMode ?? "recognize";
-  const queue = await getTodayQueue(session.user.id);
+  const [queue, user] = await Promise.all([
+    getTodayQueue(session.user.id),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { revealHoldMs: true },
+    }),
+  ]);
+  const revealHoldMs = user?.revealHoldMs ?? 1500;
 
   return (
     <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-6">
@@ -47,7 +55,7 @@ export default async function StudyPage({
           <StudyModeSelector current={mode} />
         </div>
         {mode === "recognize" ? (
-          <Flashcard initialQueue={queue} />
+          <Flashcard initialQueue={queue} revealHoldMs={revealHoldMs} />
         ) : (
           <RecallCard mode={mode} initialQueue={queue} />
         )}

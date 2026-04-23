@@ -18,17 +18,25 @@ export function StudyModeSelector({ current }: { current: Mode }) {
   const router = useRouter();
   const params = useSearchParams();
 
-  // Persist last chosen mode so next visit restores it.
+  // Persist current mode on render so URL-direct visits (bookmarks, shared
+  // links) also update the saved preference. Onclick writes synchronously
+  // first so navigation never loses to this effect.
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, current);
-    } catch {
-      // Private-mode Safari etc.
-    }
+    } catch {}
   }, [current]);
 
   function switchTo(mode: Mode) {
     if (mode === current) return;
+    // Write localStorage BEFORE navigation so StoredModeRedirect on the next
+    // render sees the just-clicked mode, not the previous one. Doing this in a
+    // useEffect would lose the race against the new page mount.
+    try {
+      localStorage.setItem(STORAGE_KEY, mode);
+    } catch {
+      // Private-mode Safari etc.
+    }
     const next = new URLSearchParams(params);
     if (mode === "recognize") next.delete("mode");
     else next.set("mode", mode);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PronounceButton } from "./pronounce-button";
 import { YouGlishEmbed } from "./youglish-embed";
+import { Definition } from "./definition";
 import { cn } from "@/lib/utils";
 
 type Example = { en: string; zh: string | null };
@@ -33,22 +34,50 @@ const RATING_META: Record<
   4: { label: "熟练", sub: "Easy", tone: "bg-sky-500", key: "4" },
 };
 
-export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
+export function Flashcard({
+  initialQueue,
+  revealHoldMs,
+}: {
+  initialQueue: QueueItem[];
+  revealHoldMs: number;
+}) {
   const router = useRouter();
   const [queue] = useState<QueueItem[]>(initialQueue);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [holdingRating, setHoldingRating] = useState<Rating | null>(null);
   const [stats, setStats] = useState({ correct: 0, total: 0 });
   const startRef = useRef<number>(Date.now());
+  const holdTimerRef = useRef<number | null>(null);
 
   const current = queue[idx];
   const done = idx >= queue.length;
+  const holding = holdingRating !== null;
+
+  const clearHoldTimer = useCallback(() => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearHoldTimer(), [clearHoldTimer]);
+
+  const advance = useCallback(() => {
+    clearHoldTimer();
+    setHoldingRating(null);
+    setFlipped(false);
+    setIdx((i) => i + 1);
+    startRef.current = Date.now();
+  }, [clearHoldTimer]);
 
   const submit = useCallback(
     async (rating: Rating) => {
-      if (!current || submitting) return;
+      if (!current || submitting || holding) return;
       setSubmitting(true);
+      setFlipped(true);
+      setHoldingRating(rating);
       const durationMs = Date.now() - startRef.current;
       try {
         await fetch("/api/study/review", {
@@ -65,24 +94,44 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
           correct: s.correct + (rating >= 3 ? 1 : 0),
           total: s.total + 1,
         }));
-        setFlipped(false);
-        setIdx((i) => i + 1);
-        startRef.current = Date.now();
+        if (revealHoldMs <= 0) {
+          advance();
+        } else {
+          holdTimerRef.current = window.setTimeout(advance, revealHoldMs);
+        }
       } finally {
         setSubmitting(false);
       }
     },
-    [current, submitting]
+    [current, submitting, holding, revealHoldMs, advance]
   );
 
   // Keyboard flow:
-  //   Space / Enter   — flip; after flip, Space = Good (3) to fast-forward
+  //   Space / Enter   — flip; after flip, Space = Good (3). During hold, advance early.
   //   J / ←           — Again (1) "don't know"
   //   K / →           — Good (3)  "know"
   //   1 / 2 / 3 / 4   — precise rating
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (done) return;
+
+      if (holding) {
+        // Post-rating reveal: any of these advances immediately.
+        if (
+          e.key === " " ||
+          e.key === "Enter" ||
+          e.key === "k" ||
+          e.key === "K" ||
+          e.key === "ArrowRight" ||
+          e.key === "j" ||
+          e.key === "J" ||
+          e.key === "ArrowLeft"
+        ) {
+          e.preventDefault();
+          advance();
+        }
+        return;
+      }
 
       if (!flipped) {
         if (e.key === " " || e.key === "Enter") {
@@ -91,17 +140,15 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
         } else if (e.key === "j" || e.key === "J" || e.key === "ArrowLeft") {
           // Power-user: say "I don't know it" without flipping first.
           e.preventDefault();
-          setFlipped(true);
           submit(1);
         } else if (e.key === "k" || e.key === "K" || e.key === "ArrowRight") {
           e.preventDefault();
-          setFlipped(true);
           submit(3);
         }
         return;
       }
 
-      // flipped
+      // flipped, no rating yet
       if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
         submit(3);
@@ -118,7 +165,7 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [flipped, submit, done]);
+  }, [flipped, submit, done, holding, advance]);
 
   if (queue.length === 0) {
     return (
@@ -248,7 +295,7 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
                 <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">
                   中文释义
                 </div>
-                <div className="text-xl leading-relaxed">{current.defZh}</div>
+                <Definition text={current.defZh} size="lg" />
               </div>
             )}
             {current.defEn && (
@@ -256,9 +303,7 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
                 <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">
                   English
                 </div>
-                <div className="text-sm leading-relaxed text-[var(--color-fg-muted)]">
-                  {current.defEn}
-                </div>
+                <Definition text={current.defEn} size="sm" muted />
               </div>
             )}
             {current.examples.length > 0 && (
@@ -302,6 +347,25 @@ export function Flashcard({ initialQueue }: { initialQueue: QueueItem[] }) {
               { keys: ["Space"], desc: "显示释义" },
               { keys: ["J", "←"], desc: "不会" },
               { keys: ["K", "→"], desc: "会" },
+            ]}
+          />
+        </div>
+      ) : holding ? (
+        <div className="space-y-3">
+          <button
+            onClick={advance}
+            className={cn(
+              "w-full h-12 rounded-xl text-white text-sm font-medium transition flex items-center justify-center gap-2",
+              RATING_META[holdingRating!].tone
+            )}
+          >
+            <span>{RATING_META[holdingRating!].label}</span>
+            <span className="opacity-75">· 下一张</span>
+            <span className="text-xs opacity-80">Enter</span>
+          </button>
+          <KeyboardHints
+            lines={[
+              { keys: ["Space", "Enter"], desc: "跳过等待进入下一张" },
             ]}
           />
         </div>

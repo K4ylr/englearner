@@ -24,6 +24,11 @@ async function saveSettings(formData: FormData): Promise<void> {
     20,
     200
   );
+  const revealHoldMs = clamp(
+    Number(formData.get("revealHoldMs")) || 1500,
+    0,
+    5000
+  );
 
   await prisma.user.update({
     where: { id: session.user.id },
@@ -31,6 +36,7 @@ async function saveSettings(formData: FormData): Promise<void> {
       mode,
       dailyNewGoal,
       dailyReviewCap,
+      revealHoldMs,
       interests,
     },
   });
@@ -54,6 +60,7 @@ export default async function SettingsPage() {
       estVocabSize: true,
       dailyNewGoal: true,
       dailyReviewCap: true,
+      revealHoldMs: true,
       mode: true,
       interests: true,
       onboardedAt: true,
@@ -62,7 +69,7 @@ export default async function SettingsPage() {
 
   return (
     <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-10">
-      <div className="max-w-3xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold">设置</h1>
@@ -106,6 +113,7 @@ export default async function SettingsPage() {
             mode: (user?.mode as "normal" | "endless") ?? "endless",
             dailyNewGoal: user?.dailyNewGoal ?? 10,
             dailyReviewCap: user?.dailyReviewCap ?? 50,
+            revealHoldMs: user?.revealHoldMs ?? 1500,
             topics: user?.interests ?? [],
           }}
         />

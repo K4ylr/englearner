@@ -7,6 +7,7 @@ export type SettingsDefaults = {
   mode: "normal" | "endless";
   dailyNewGoal: number;
   dailyReviewCap: number;
+  revealHoldMs: number;
   topics: string[];
 };
 
@@ -29,6 +30,7 @@ export function SettingsForm({
   const [mode, setMode] = useState<"normal" | "endless">(defaults.mode);
   const [newGoal, setNewGoal] = useState(defaults.dailyNewGoal);
   const [reviewCap, setReviewCap] = useState(defaults.dailyReviewCap);
+  const [revealHold, setRevealHold] = useState(defaults.revealHoldMs);
   const [selected, setSelected] = useState<Set<string>>(
     new Set(defaults.topics)
   );
@@ -114,9 +116,26 @@ export function SettingsForm({
         </p>
       </Section>
 
+      {/* Reveal hold */}
+      <Section title="评分后停留时间">
+        <Slider
+          id="revealHoldMs"
+          value={revealHold}
+          onChange={setRevealHold}
+          min={0}
+          max={5000}
+          step={500}
+          suffix="毫秒"
+        />
+        <p className="text-xs text-[var(--color-fg-muted)] mt-2 leading-relaxed">
+          识别模式下选择&ldquo;会/不会&rdquo;后，卡片会停留一段时间让你再看一眼释义与例句；
+          按 Space / Enter 可立即进入下一张。设为 0 就不等待。
+        </p>
+      </Section>
+
       {/* Interests */}
       <Section title="兴趣方向">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           {TOPICS.map((t) => {
             const on = selected.has(t.id);
             return (
