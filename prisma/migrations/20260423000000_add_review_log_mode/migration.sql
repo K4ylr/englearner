@@ -1,2 +1,2 @@
 -- AddColumn
-ALTER TABLE "ReviewLog" ADD COLUMN "mode" TEXT NOT NULL DEFAULT 'recognize';
+ALTER TABLE "ReviewLog" ADD COLUMN IF NOT EXISTS "mode" TEXT NOT NULL DEFAULT 'recognize';
