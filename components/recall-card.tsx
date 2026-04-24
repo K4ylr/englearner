@@ -331,7 +331,7 @@ export function RecallCard({
         ) : (
           <>
             {/* Left panel — lemma + pronounce */}
-            <div className="flex flex-col items-center justify-center gap-5 lg:border-r lg:border-[var(--color-border)] lg:pr-10 text-center">
+            <div className="flex flex-col items-center justify-center gap-5 lg:border-r lg:border-[var(--color-border)] lg:pr-10 text-center min-w-0">
               {autoRating !== null && (
                 <div className={cn("text-sm font-medium", autoTone)}>
                   {autoLabel}
@@ -342,7 +342,7 @@ export function RecallCard({
                   )}
                 </div>
               )}
-              <div className="text-6xl sm:text-7xl lg:text-8xl font-semibold tracking-tight break-words leading-[1.05]">
+              <div className="text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight break-words leading-[1.05] w-full">
                 {current.lemma}
               </div>
               <div className="flex items-center gap-3 text-base">
@@ -364,7 +364,7 @@ export function RecallCard({
             </div>
 
             {/* Right panel — definitions + examples + video */}
-            <div className="mt-8 lg:mt-0 pt-6 lg:pt-0 border-t lg:border-t-0 border-[var(--color-border)] space-y-5 overflow-y-auto">
+            <div className="mt-8 lg:mt-0 pt-6 lg:pt-0 border-t lg:border-t-0 border-[var(--color-border)] space-y-5 overflow-y-auto min-w-0">
               {current.defZh && (
                 <div>
                   <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">

@@ -419,11 +419,18 @@ export function Flashcard({
         {/* Left / top panel: the lemma itself */}
         <div
           className={cn(
-            "flex flex-col items-center justify-center gap-6 text-center",
+            "flex flex-col items-center justify-center gap-6 text-center min-w-0",
             flipped ? "lg:border-r lg:border-[var(--color-border)] lg:pr-10" : "flex-1"
           )}
         >
-          <div className="text-7xl sm:text-8xl lg:text-9xl font-semibold tracking-tight break-words leading-[1.05]">
+          <div
+            className={cn(
+              "font-semibold tracking-tight break-words leading-[1.05] w-full",
+              flipped
+                ? "text-5xl sm:text-6xl lg:text-7xl"
+                : "text-7xl sm:text-8xl lg:text-9xl"
+            )}
+          >
             {current.lemma}
           </div>
           <div className="flex items-center gap-3 text-base">
@@ -445,7 +452,7 @@ export function Flashcard({
         </div>
 
         {flipped && (
-          <div className="mt-8 lg:mt-0 pt-6 lg:pt-0 border-t lg:border-t-0 border-[var(--color-border)] space-y-5 overflow-y-auto">
+          <div className="mt-8 lg:mt-0 pt-6 lg:pt-0 border-t lg:border-t-0 border-[var(--color-border)] space-y-5 overflow-y-auto min-w-0">
             {current.defZh && (
               <div>
                 <div className="text-xs uppercase tracking-wider text-[var(--color-fg-muted)] mb-1">

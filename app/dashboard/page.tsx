@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { Flame, Settings, Trophy } from "lucide-react";
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getDashboardStats } from "@/lib/stats";
+import { ActivityBars, MasteryCurve } from "@/components/dashboard-charts";
 
 export const metadata = { title: "仪表盘 · EngLearner" };
 export const dynamic = "force-dynamic";
@@ -25,39 +27,37 @@ export default async function DashboardPage() {
 
   const totalWords = await prisma.word.count();
 
-  // If the corpus is empty, onboarding can't work — show a seeding banner.
-  // Otherwise if the user hasn't completed onboarding, push them through it.
   if (user && !user.onboardedAt && totalWords > 0) {
     redirect("/onboarding/placement");
   }
 
-  const now = new Date();
-  const todayMidnight = new Date(now);
-  todayMidnight.setUTCHours(0, 0, 0, 0);
+  const needsSeeding = totalWords === 0;
 
-  const [dueCount, todaySession] = await Promise.all([
+  const [stats, dueCount] = await Promise.all([
+    getDashboardStats(userId),
     prisma.userWord.count({
-      where: { userId, due: { lte: now }, state: { not: "mastered" } },
-    }),
-    prisma.dailySession.findUnique({
-      where: { userId_date: { userId, date: todayMidnight } },
+      where: { userId, due: { lte: new Date() }, state: { not: "mastered" } },
     }),
   ]);
 
   const dailyNewGoal = user?.dailyNewGoal ?? 10;
-  const newDoneToday = todaySession?.newDone ?? 0;
-  const reviewDoneToday = todaySession?.reviewDone ?? 0;
   const mode = user?.mode ?? "endless";
   const remainingNew =
-    mode === "endless" ? Infinity : Math.max(0, dailyNewGoal - newDoneToday);
+    mode === "endless"
+      ? Infinity
+      : Math.max(0, dailyNewGoal - stats.totals.todayNew);
+  const canStudy =
+    !needsSeeding && (dueCount > 0 || mode === "endless" || remainingNew > 0);
+
+  const accuracy =
+    stats.totals.todayTotal > 0
+      ? Math.round((stats.totals.todayCorrect / stats.totals.todayTotal) * 100)
+      : null;
 
   async function logout() {
     "use server";
     await signOut({ redirectTo: "/" });
   }
-
-  const needsSeeding = totalWords === 0;
-  const canStudy = !needsSeeding && (dueCount > 0 || mode === "endless" || remainingNew > 0);
 
   return (
     <main className="min-h-screen px-4 sm:px-8 lg:px-12 py-10">
@@ -95,65 +95,177 @@ export default async function DashboardPage() {
             </p>
           </section>
         ) : (
-          <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-6">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-[var(--color-fg-muted)]">
-                今日任务
-                {mode === "endless" && (
-                  <span className="text-[0.65rem] uppercase tracking-wider bg-[var(--color-brand)]/10 text-[var(--color-brand)] px-2 py-0.5 rounded">
-                    无尽模式
-                  </span>
-                )}
-              </div>
-              <div className="mt-1 text-3xl font-semibold">
-                {mode === "endless" ? (
-                  <>
-                    {dueCount > 0 ? dueCount : "∞"}{" "}
-                    <span className="text-base font-normal text-[var(--color-fg-muted)]">
-                      {dueCount > 0 ? "待复习 + 新词随学随有" : "张新词随时可学"}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    {dueCount + (Number.isFinite(remainingNew) ? remainingNew : 0)}{" "}
-                    <span className="text-base font-normal text-[var(--color-fg-muted)]">
-                      张卡片
-                    </span>
-                  </>
-                )}
-              </div>
-              {mode !== "endless" && (
-                <div className="mt-1 text-sm text-[var(--color-fg-muted)]">
-                  {Number.isFinite(remainingNew) ? remainingNew : 0} 新词 ·{" "}
-                  {dueCount} 待复习
+          <>
+            {/* Hero — today + streak side by side */}
+            <section className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-5">
+                <div>
+                  <div className="flex items-center gap-2 text-sm text-[var(--color-fg-muted)]">
+                    今日任务
+                    {mode === "endless" && (
+                      <span className="text-[0.65rem] uppercase tracking-wider bg-[var(--color-brand)]/10 text-[var(--color-brand)] px-2 py-0.5 rounded">
+                        无尽模式
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-3xl font-semibold">
+                    {mode === "endless" ? (
+                      <>
+                        {dueCount > 0 ? dueCount : "∞"}{" "}
+                        <span className="text-base font-normal text-[var(--color-fg-muted)]">
+                          {dueCount > 0
+                            ? "待复习 + 新词随学随有"
+                            : "张新词随时可学"}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {dueCount +
+                          (Number.isFinite(remainingNew) ? remainingNew : 0)}{" "}
+                        <span className="text-base font-normal text-[var(--color-fg-muted)]">
+                          张卡片
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  {mode !== "endless" && (
+                    <div className="mt-1 text-sm text-[var(--color-fg-muted)]">
+                      {Number.isFinite(remainingNew) ? remainingNew : 0} 新词 ·{" "}
+                      {dueCount} 待复习
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <Link
-              href={canStudy ? "/study" : "/settings"}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--color-brand)] px-6 text-sm font-medium text-white hover:bg-[var(--color-brand-hover)] transition"
-            >
-              {canStudy ? "开始学习 →" : "去设置调整 →"}
-            </Link>
-          </section>
-        )}
+                <Link
+                  href={canStudy ? "/study" : "/settings"}
+                  className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--color-brand)] px-6 text-sm font-medium text-white hover:bg-[var(--color-brand-hover)] transition"
+                >
+                  {canStudy ? "开始学习 →" : "去设置调整 →"}
+                </Link>
+                {stats.totals.todayTotal > 0 && (
+                  <div className="text-sm text-[var(--color-fg-muted)] flex items-center gap-3 pt-2 border-t border-[var(--color-border)]">
+                    <span>
+                      今日已学{" "}
+                      <strong className="text-[var(--color-fg)] tabular-nums">
+                        {stats.totals.todayTotal}
+                      </strong>{" "}
+                      张
+                    </span>
+                    {accuracy !== null && (
+                      <>
+                        <span className="text-[var(--color-border)]">·</span>
+                        <span>
+                          正确率{" "}
+                          <strong className="text-[var(--color-fg)] tabular-nums">
+                            {accuracy}%
+                          </strong>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
 
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Stat
-            label="今日已学"
-            value={String(newDoneToday + reviewDoneToday)}
-          />
-          <Stat
-            label="CEFR 水平"
-            value={user?.cefrLevel ?? "—"}
-            hint={
-              user?.estVocabSize
-                ? `约 ${user.estVocabSize.toLocaleString()} 词`
-                : undefined
-            }
-          />
-          <Stat label="词库总量" value={totalWords.toLocaleString()} />
-        </section>
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 flex flex-col justify-center">
+                <div className="flex items-center gap-2 text-sm text-[var(--color-fg-muted)]">
+                  <Flame className="size-4 text-orange-500" />
+                  连续打卡
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-4xl font-semibold tabular-nums">
+                    {stats.streak.current}
+                  </span>
+                  <span className="text-sm text-[var(--color-fg-muted)]">
+                    天
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+                  <Trophy className="size-3" />
+                  最长 {stats.streak.longest} 天
+                </div>
+                {stats.streak.current === 0 && (
+                  <p className="mt-3 text-xs text-[var(--color-fg-muted)] leading-relaxed">
+                    今天还没开始学哦，完成一张就能把连续记录续上。
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* Current totals */}
+            <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Stat
+                label="已掌握"
+                value={stats.totals.masteredCount.toLocaleString()}
+                hint="稳定度 ≥ 180 天"
+              />
+              <Stat
+                label="熟悉中"
+                value={stats.totals.knownCount.toLocaleString()}
+                hint="已进入长期记忆"
+              />
+              <Stat
+                label="本周新学"
+                value={stats.totals.thisWeekNew.toLocaleString()}
+                hint="过去 7 天"
+              />
+              <Stat
+                label="CEFR / 词汇量"
+                value={user?.cefrLevel ?? "—"}
+                hint={
+                  user?.estVocabSize
+                    ? `约 ${user.estVocabSize.toLocaleString()} 词`
+                    : "未测评"
+                }
+              />
+            </section>
+
+            {/* Activity bars */}
+            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h2 className="font-medium">过去 30 天学习量</h2>
+                  <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
+                    每日新词 + 复习数
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-[var(--color-fg-muted)]">
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2.5 rounded-sm bg-[var(--color-brand)]" />
+                    新词
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2.5 rounded-sm bg-amber-500" />
+                    复习
+                  </span>
+                </div>
+              </div>
+              <div className="text-[var(--color-fg-muted)]">
+                <ActivityBars data={stats.activity} />
+              </div>
+            </section>
+
+            {/* Mastery curve */}
+            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h2 className="font-medium">词汇量增长曲线</h2>
+                  <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
+                    累计学过的词数（含复习中 + 已掌握）
+                  </p>
+                </div>
+                <div className="text-sm">
+                  共{" "}
+                  <strong className="tabular-nums">
+                    {stats.totals.totalEverSeen.toLocaleString()}
+                  </strong>{" "}
+                  / {totalWords.toLocaleString()} 词
+                </div>
+              </div>
+              <div className="text-[var(--color-fg-muted)]">
+                <MasteryCurve data={stats.cumulative} />
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </main>
   );
