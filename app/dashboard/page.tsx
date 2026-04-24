@@ -4,7 +4,7 @@ import { Flame, Settings, Trophy } from "lucide-react";
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getDashboardStats } from "@/lib/stats";
-import { ActivityBars, MasteryCurve } from "@/components/dashboard-charts";
+import { ActivityHeatmap, HeatmapLegend, MasteryCurve } from "@/components/dashboard-charts";
 
 export const metadata = { title: "仪表盘 · EngLearner" };
 export const dynamic = "force-dynamic";
@@ -218,50 +218,58 @@ export default async function DashboardPage() {
               />
             </section>
 
-            {/* Activity bars */}
-            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
+            {/* Activity heatmap + mastery curve side-by-side on lg */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-5">
                 <div>
-                  <h2 className="font-medium">过去 30 天学习量</h2>
+                  <h2 className="font-medium">活跃热力图</h2>
                   <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
-                    每日新词 + 复习数
+                    过去 6 周每日新词 + 复习总量
                   </p>
                 </div>
-                <div className="flex items-center gap-4 text-xs text-[var(--color-fg-muted)]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-sm bg-[var(--color-brand)]" />
-                    新词
+                <div className="text-[var(--color-fg-muted)] flex justify-center">
+                  <ActivityHeatmap data={stats.activity} />
+                </div>
+                <div className="flex items-center justify-between text-xs text-[var(--color-fg-muted)]">
+                  <span>
+                    活跃 {stats.activity.filter((d) => d.newDone + d.reviewDone > 0).length} 天
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-sm bg-amber-500" />
-                    复习
-                  </span>
+                  <HeatmapLegend />
                 </div>
               </div>
-              <div className="text-[var(--color-fg-muted)]">
-                <ActivityBars data={stats.activity} />
-              </div>
-            </section>
 
-            {/* Mastery curve */}
-            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <h2 className="font-medium">词汇量增长曲线</h2>
-                  <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
-                    累计学过的词数（含复习中 + 已掌握）
-                  </p>
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-medium">词汇量增长曲线</h2>
+                    <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
+                      过去 30 天累计学过的词数
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold tabular-nums">
+                      {stats.totals.totalEverSeen.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-[var(--color-fg-muted)]">
+                      / {totalWords.toLocaleString()}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-sm">
-                  共{" "}
-                  <strong className="tabular-nums">
-                    {stats.totals.totalEverSeen.toLocaleString()}
+                <div className="text-[var(--color-fg-muted)]">
+                  <MasteryCurve data={stats.cumulative} />
+                </div>
+                <div className="text-xs text-[var(--color-fg-muted)]">
+                  30 天增长{" "}
+                  <strong className="text-[var(--color-fg)] tabular-nums">
+                    {(() => {
+                      const d =
+                        stats.cumulative[stats.cumulative.length - 1].count -
+                        stats.cumulative[0].count;
+                      return `${d >= 0 ? "+" : ""}${d}`;
+                    })()}
                   </strong>{" "}
-                  / {totalWords.toLocaleString()} 词
+                  词
                 </div>
-              </div>
-              <div className="text-[var(--color-fg-muted)]">
-                <MasteryCurve data={stats.cumulative} />
               </div>
             </section>
           </>
